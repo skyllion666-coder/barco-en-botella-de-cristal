@@ -19,10 +19,10 @@ function puntosExtremos(grupo, N = 160) {
   grupo.children.forEach((o) => {
     if (!o.isMesh) return;
     o.updateMatrix();
-    const pos = o.geometry.attributes.position, emp = o.geometry.attributes._empuje;
+    const pos = o.geometry.attributes.position, emp = o.geometry.attributes._empuje || o.geometry.attributes._ondeo;
     for (let i = 0; i < pos.count; i++) {
       v.fromBufferAttribute(pos, i);
-      // velas del modelo: se cuenta su hinchado máximo con viento fuerte (ver barcoModelo.js)
+      // velas y banderas del modelo: se cuenta su desplazamiento máximo con viento fuerte (ver barcoModelo.js)
       if (emp) v.x += emp.getX(i) * 0.14, v.y += emp.getY(i) * 0.14, v.z += emp.getZ(i) * 0.14;
       v.applyMatrix4(o.matrix); verts.push(v.x, v.y, v.z);
     }

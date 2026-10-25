@@ -144,6 +144,7 @@ export function crearClima({ mundo, agua, barco, botella, camara, alRayo }) {
 
   return {
     prec, cielo, p, o, luzFinal, colAire, qEnv, qInv, saltar, fijar, actualizar, forzarRayo,
+    ponerBarco: (b) => { barco = b; },
     get nombre() { return nombre; }, ponerMar: (v) => { o.mar = v; }, ponerViento: (v) => { o.viento = v; },
     // día y noche según la hora local (fija: hora concreta para pruebas, p. ej. 21.5)
     get horaReal() { return hora.real; }, set horaReal(v) { hora.real = !!v; }, fijarHora: (h) => { hora.fija = h; },

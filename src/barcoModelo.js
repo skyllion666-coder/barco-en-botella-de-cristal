@@ -1,11 +1,10 @@
-// Barco a partir del modelo real («Ottoman Coastal Trade Tall Ship», de polygora, CC-BY), preparado por
-// scripts/preparar_barco.mjs: ya viene en el marco de la app (proa +X, Y arriba, flotación en y = 0), unido por
-// materiales y con el atributo _EMPUJE en las velas. Misma interfaz que el barco procedural de barco.js.
+// Barco a partir de un modelo real preparado por scripts/preparar_barco.mjs: ya viene en el marco de la app
+// (proa +X, Y arriba, flotación en y = 0), unido por materiales, con _EMPUJE en las velas (hinchado) y _ONDEO en
+// las banderas. En extras trae la huella del casco, los farolillos, el rumbo y el crédito del autor.
+// Misma interfaz que el barco procedural de barco.js.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
-
-export const CREDITO_BARCO = '«Ottoman Coastal Trade Tall Ship», de polygora (Sketchfab), licencia CC-BY. Modificado.';
 
 export async function crearBarcoModelo(datos) {
   const cargador = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
@@ -38,6 +37,18 @@ export async function crearBarcoModelo(datos) {
             float flameo = sin(uTiempo * 2.3 + position.y * 1.3 + position.x * 0.7) * 0.5 + sin(uTiempo * 4.1 + position.y * 2.9) * 0.25;
             transformed += _empuje * (0.05 + 0.07 * uViento) * (1.0 + 0.18 * flameo * uViento);`);
       };
+    } else if (m.geometry.attributes._ondeo) {
+      // banderas: ondas que recorren la tela desde el asta hacia la punta, más rápidas y amplias con viento
+      mat.side = THREE.DoubleSide;
+      mat.onBeforeCompile = (sh) => {
+        Object.assign(sh.uniforms, uVelas);
+        sh.vertexShader = sh.vertexShader
+          .replace('#include <common>', '#include <common>\nattribute vec3 _ondeo; uniform float uTiempo; uniform float uViento;')
+          .replace('#include <begin_vertex>', `#include <begin_vertex>
+            float tb = length(_ondeo);
+            float onda = sin(uTiempo * (5.0 + 5.0 * uViento) - tb * 7.0) + 0.35 * sin(uTiempo * 11.0 - tb * 15.0 + 1.3);
+            transformed += _ondeo * onda * (0.05 + 0.10 * uViento);`);
+      };
     }
     grupo.add(m);
   }
@@ -45,12 +56,11 @@ export async function crearBarcoModelo(datos) {
   // farolillos de noche en popa y proa (por encima de la regala)
   const c = extras.casco || { min: [-3.3, -0.65, -0.9], max: [3.3, 1.3, 0.9] };
   const t = extras.total || { min: c.min, max: c.max };
+  const posLuces = extras.farolillos || [[c.min[0] + 0.25, c.max[1] + 0.35, 0], [c.max[0] - 0.35, c.max[1] + 0.2, 0]];
   const matLuz = new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.62, 0.28), toneMapped: false });
   const geoLuz = new THREE.SphereGeometry(0.07, 10, 8);
   const luces = new THREE.Group();
-  for (const [x, y] of [[c.min[0] + 0.25, c.max[1] + 0.35], [c.max[0] - 0.35, c.max[1] + 0.2]]) {
-    const l = new THREE.Mesh(geoLuz, matLuz); l.position.set(x, y, 0); luces.add(l);
-  }
+  for (const [x, y, z] of posLuces) { const l = new THREE.Mesh(geoLuz, matLuz); l.position.set(x, y, z); luces.add(l); }
   luces.visible = false;
   grupo.add(luces);
 
@@ -59,7 +69,7 @@ export async function crearBarcoModelo(datos) {
     proa: t.max[0], popa: t.min[0], rumbo: extras.rumbo,
   };
   return {
-    grupo, info, modelo: true,
+    grupo, info, modelo: true, credito: extras.credito || '',
     matPopa: { emissiveIntensity: 0 }, // el modelo no tiene ventanas de popa iluminables
     actualizar(tiempo, viento) { uVelas.uTiempo.value = tiempo; uVelas.uViento.value = viento; },
     farolillos(noche, tiempo) {

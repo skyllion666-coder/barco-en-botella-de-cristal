@@ -78,6 +78,17 @@ Probado en móvil real (GitHub Pages): al pasar de horizontal a vertical el barc
 - La flotación y la espuma usan las medidas del casco del modelo (`barco.info`); rumbo de reposo casi de costado (-0,30 rad).
 - Prueba de giro con el modelo: nunca toca el cristal, sin saltos, sin encogerse.
 
+### Galeón (25-10-2026)
+- El usuario prefiere el galeón «galeone_ii» (`assets/galeon-ligero.glb`): ahora es el barco de la app. **Autor y licencia por confirmar** (posible «Ship Y», Sketchfab, CC-BY): no publicar hasta saberlo.
+- `preparar_barco.mjs` admite varios modelos (`galeon` por defecto, `ottoman`). Para el galeón: centrado en la huella del casco, flotación en y = 1,3 del original,
+  altura 6,7 (cabe tumbado con la botella de pie), 13 velas con hinchado y 3 banderas que ondean, 148 → 42 mallas. `docs/index.html` pasa a ~3,9 MB.
+- Sus texturas vienen a 256 px (se aligeraron antes de subirlo): con el `galeone_ii.glb` original (43 MB) se podrían usar texturas mejores.
+
+### Dos barcos a elegir (25-10-2026)
+- Petición del usuario: poder cambiar entre los dos barcos. Ajustes → «Barco: Galeón/Otomano» los alterna al momento (se rehacen flotación y reflejo) y se recuerda.
+  Los dos van incrustados (`assets/barco-galeon.glb`, `assets/barco-ottoman.glb`): `docs/index.html` ~4,8 MB. `?barco=galeon|ottoman|procedural` fuerza uno.
+- `npm run prueba:giro` prueba los dos barcos.
+
 ## Decisiones tomadas
 - Estilo: lo más realista posible (superar la foto de referencia).
 - El barco es procedural porque el entorno de desarrollo no puede descargar de Poly Pizza, Sketchfab ni Poly Haven (red restringida).
@@ -98,3 +109,4 @@ Probado en móvil real (GitHub Pages): al pasar de horizontal a vertical el barc
 ## Reglas
 - Todo el texto de la app y la conversación, en español.
 - Mantener el proyecto ligero (menos de 100 MB) para poder subirlo a sesiones en la nube.
+- Las velas SIEMPRE se mueven con el aire (viento del clima y del movimiento del móvil), y todo el barco, velas y cuerdas debe ser lo más realista posible (petición expresa del usuario).

@@ -8,7 +8,8 @@ import { crearAgua } from './agua.js';
 import { texRuido } from './texturas.js';
 import { crearBarco } from './barco.js';
 import { crearBarcoModelo } from './barcoModelo.js';
-import datosBarco from '../assets/barco-web.glb';
+import datosGaleon from '../assets/barco-galeon.glb';
+import datosOttoman from '../assets/barco-ottoman.glb';
 import { crearFlotacion } from './flotacion.js';
 import { crearSensores } from './sensores.js';
 import { crearClima } from './clima.js';
@@ -28,13 +29,22 @@ const { cubo, pmrem } = crearCubemapEntorno(canal.renderer, 512);
 const botella = crearBotella();
 const mundo = crearMundo({ pmrem });
 const ruido = texRuido(256);
-// Barco: el modelo real (incrustado en la página); ?barco=procedural usa el barco generado por código.
-// Si el modelo fallara al cargar, se usa también el procedural.
-let barco;
-if (params.get('barco') === 'procedural') barco = crearBarco();
-else {
-  try { barco = await crearBarcoModelo(datosBarco); } catch (e) { console.warn('[app] modelo del barco no disponible:', e); barco = crearBarco(); }
+// Barcos disponibles, incrustados en la página. Se cambian desde Ajustes (se recuerda la elección);
+// ?barco=galeon|ottoman|procedural fuerza uno (procedural = el generado por código, también si un modelo fallara).
+const BARCOS = { galeon: { nombre: 'Galeón', datos: datosGaleon }, ottoman: { nombre: 'Otomano', datos: datosOttoman } };
+const cacheBarcos = {};
+async function cargarBarco(id) {
+  if (cacheBarcos[id]) return cacheBarcos[id];
+  let b;
+  if (!BARCOS[id]) b = crearBarco();
+  else {
+    try { b = await crearBarcoModelo(BARCOS[id].datos); } catch (e) { console.warn('[app] modelo del barco no disponible:', e); b = crearBarco(); }
+  }
+  return (cacheBarcos[id] = b);
 }
+const barcoGuardado = (() => { try { return JSON.parse(localStorage.getItem('barco-botella-v2') || '{}').barco; } catch (_) { return null; } })();
+let idBarco = params.get('barco') || (BARCOS[barcoGuardado] ? barcoGuardado : 'galeon');
+let barco = await cargarBarco(idBarco);
 mundo.interior.escena.add(barco.grupo); // el barco vive dentro de la botella, con la luz del clima
 
 const U = {
@@ -45,9 +55,9 @@ const U = {
 };
 const vidrio = crearVidrio(U, botella.exterior);
 const agua = crearAgua({ renderer: canal.renderer, botella, texRuido: ruido, cubo, relleno: num('relleno', 0.30) });
-const flotacion = crearFlotacion({ barco, agua, botella });
+let flotacion = crearFlotacion({ barco, agua, botella });
 const gotas = crearGotas({ renderer: canal.renderer, agua, botella });
-const reflejo = crearReflejo({ interior: mundo.interior, barco, renderer: canal.renderer });
+let reflejo = crearReflejo({ interior: mundo.interior, barco, renderer: canal.renderer });
 
 const camara = new THREE.PerspectiveCamera(20, 2, 5, 220);
 const OBJETIVO = new THREE.Vector3(0.9, -1.2, 0);
@@ -102,13 +112,32 @@ if (params.has('mar')) clima.ponerMar(num('mar', 0.5));
 if (params.has('viento')) clima.ponerViento(num('viento', 0.75));
 if (modoCaptura) clima.saltar();
 
+// Cambia de barco al momento: se monta en la botella y se rehacen su flotación y su reflejo.
+let ui = null;
+async function cambiarBarco(id) {
+  if (id === idBarco || !BARCOS[id]) return;
+  const nuevo = await cargarBarco(id);
+  mundo.interior.escena.remove(barco.grupo);
+  barco = nuevo; idBarco = id;
+  mundo.interior.escena.add(barco.grupo);
+  flotacion = crearFlotacion({ barco, agua, botella });
+  reflejo = crearReflejo({ interior: mundo.interior, barco, renderer: canal.renderer });
+  clima.ponerBarco(barco);
+  ui?.ponerCredito(barco.credito);
+}
+const barcos = {
+  lista: Object.entries(BARCOS).map(([id, b]) => ({ id, nombre: b.nombre })),
+  get actual() { return idBarco; },
+  cambiar: cambiarBarco,
+};
+
 const rend = { fps: 0, cuadros: 0, desde: 0 }; // fotogramas por segundo medidos (se muestran en Ajustes)
 if (params.get('ui') !== '0') {
-  crearUI({
+  ui = crearUI({
     clima, sensores, audio,
     alAjustarCalidad: () => { calidad.modo = MODOS[(MODOS.indexOf(calidad.modo) + 1) % MODOS.length]; redimensionar(); },
     estadoCalidad: () => calidad.modo,
-    opciones, rendimiento: () => ({ fps: rend.fps, resolucion: Math.round(dprActual() / dprDisp * 100) }),
+    opciones, barcos, creditoBarco: barco.credito, rendimiento: () => ({ fps: rend.fps, resolucion: Math.round(dprActual() / dprDisp * 100) }),
   });
 }
 
@@ -197,4 +226,7 @@ if (modoCaptura) {
   requestAnimationFrame(bucle);
   window.__listo = true;
 }
-window.__api = { clima, sensores, agua, calidad, redibujar: () => dibujar(tTotal), camara, canal, avanzar, flotacion, barco, botella, audio, gotas };
+window.__api = {
+  clima, sensores, agua, calidad, redibujar: () => dibujar(tTotal), camara, canal, avanzar, botella, audio, gotas, cambiarBarco,
+  get flotacion() { return flotacion; }, get barco() { return barco; },
+};
