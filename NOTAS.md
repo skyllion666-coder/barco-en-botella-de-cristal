@@ -144,6 +144,10 @@ Probado en móvil real (GitHub Pages): al pasar de horizontal a vertical el barc
   (`barco.js`). Si la descarga del galeón falla, la app avisa y reintenta (2, 4, 6… s). Lo de las secciones anteriores sobre el otomano
   y el cambio de barco es historia.
 
+### Arcoíris solo con cielo claro (versión 15)
+- Salía al pasar de lluvia a nieve o a niebla. Ahora solo aparece si escampa a cielo claro (nieve < 0,05 y niebla < 0,008) y se apaga si
+  llegan nieve o niebla. Prueba: de lluvia a nieve 0, a niebla 0, a noche 0, a despejado 1, a atardecer 0,76.
+
 ### Sorpresas (no contárselas al usuario hasta que las vea)
 - Bioluminiscencia: de noche el agua agitada, la estela, las burbujas y las salpicaduras brillan en azul verdoso.
 - Estrellas fugaces de noche, cada 6-16 s, dentro de la botella.

@@ -45,7 +45,7 @@ export function crearClima({ mundo, agua, barco, botella, camara, alRayo }) {
   let nombre = 'despejado';
   let proximoRayo = 3, pulsos = [];
   let rachas = null; // viento con rachas (viento.js), si se conecta
-  // arcoíris: aparece cuando escampa después de llover (durante ~30 s), si hay luz
+  // arcoíris: aparece cuando escampa después de llover (durante ~30 s), si hay luz y el cielo queda claro
   const arco = { ultimaLluvia: -1e9, inicio: -1e9, mostrado: true };
   // objetivo efectivo: el ajuste elegido, modificado por la hora real si está activada
   const e = { ...p, tinte: new THREE.Color(1, 1, 1), colNiebla: new THREE.Color(0.7, 0.75, 0.8) };
@@ -119,10 +119,13 @@ export function crearClima({ mundo, agua, barco, botella, camara, alRayo }) {
 
     prec.actualizar(t, { cantLluvia: p.lluvia, cantNieve: p.nieve, viento: rachas ? Math.min(rachas.total, 1.4) : p.viento, luz: luzFinal, aspecto });
     if (p.lluvia > 0.45) { arco.ultimaLluvia = t; arco.mostrado = false; }
-    if (!arco.mostrado && p.lluvia < 0.12 && t - arco.ultimaLluvia < 25) { arco.inicio = t; arco.mostrado = true; }
+    // solo si escampa a cielo claro: con nieve o niebla no hay sol directo ni gotas de lluvia, no hay arcoíris
+    const despejando = p.nieve < 0.05 && p.niebla < 0.008;
+    if (!arco.mostrado && p.lluvia < 0.12 && t - arco.ultimaLluvia < 25 && despejando) { arco.inicio = t; arco.mostrado = true; }
     const ta = t - arco.inicio, DUR = 32;
     const arcoiris = ta < 0 || ta > DUR ? 0 : clamp(ta / 4, 0, 1) * clamp((DUR - ta) / 8, 0, 1)
-      * clamp((p.luz - 0.45) / 0.35, 0, 1) * (1 - p.noche) * clamp(1 - p.lluvia * 4, 0, 1);
+      * clamp((p.luz - 0.45) / 0.35, 0, 1) * (1 - p.noche) * clamp(1 - p.lluvia * 4, 0, 1)
+      * clamp(1 - p.nieve * 10, 0, 1) * clamp(1 - p.niebla * 60, 0, 1); // si llega nieve o niebla, se apaga
     cielo.actualizar(t, { rayo: p.rayo, noche: p.noche, cubierto: clamp(p.lluvia + p.nieve + p.niebla * 20, 0, 1), altoPx, arcoiris });
   }
 

@@ -253,5 +253,6 @@ export function crearCielo({ escena, agua, botella, luzRayo }) {
     }
   }
 
-  return { disparar, actualizar, lanzarFugaz: () => lanzarFugaz(tAhora) };
+  // arcoVisible(): intensidad del arcoíris que se ve ahora (para las pruebas)
+  return { disparar, actualizar, lanzarFugaz: () => lanzarFugaz(tAhora), arcoVisible: () => (arco.visible ? matArco.uniforms.uInt.value : 0) };
 }
