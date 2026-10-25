@@ -11,8 +11,8 @@ android {
         applicationId = "com.skyllion.barcobotella"
         minSdk = 24
         targetSdk = 36
-        versionCode = 14
-        versionName = "14"
+        versionCode = 17
+        versionName = "17"
     }
 
     // Misma clave que el resto de apps (release.keystore, alias chess_release).
