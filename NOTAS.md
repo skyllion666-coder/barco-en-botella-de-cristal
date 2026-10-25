@@ -30,7 +30,17 @@ Mar en calma por defecto (despejado: mar 0.08, viento 0.15); solo la lluvia y la
 Giroscopio: la lógica está probada con eventos simulados en horizontal (`scripts/prueba_giroscopio.mjs`). En el visor de artefactos de Claude el navegador NO entrega el giroscopio (marco bloqueado);
 el panel de ajustes muestra el estado y el motivo. Hay que abrir `docs/index.html` directamente por HTTPS.
 
-Sin verificar todavía: rendimiento real en móvil, giroscopio en un móvil real, sonido a oído.
+Sin verificar todavía: rendimiento real en móvil, sonido a oído.
+
+### Arreglo: el barco se salía al girar el móvil (25-10-2026)
+Probado en móvil real (GitHub Pages): al pasar de horizontal a vertical el barco se salía un momento de la botella y reaparecía en otro sitio.
+- Causa: la base del plano del agua (`e1`, `e2`) saltaba 90° al pasar de un umbral de inclinación, y el barco guardaba su posición en esas coordenadas, así que se teletransportaba.
+  Además solo se comprobaba que cupiera en una línea, no con su forma completa, y la rotación de pantalla hacía saltar la gravedad de golpe.
+- Arreglo: base del plano continua (`agua.js`), posición y rumbo del barco en 3D reproyectados cada cuadro, comprobación de ~150 puntos extremos del barco
+  contra el cristal con corrección suave (se aparta, cabecea o escora como apoyándose en el vidrio y, como último recurso, se encoge un poco) (`flotacion.js`),
+  y suavizado en dos etapas durante 1,2 s tras rotar la pantalla, sin contar el giro como sacudida y recalibrando cuando el móvil ya está quieto (`sensores.js`).
+- Prueba de regresión: `node scripts/prueba_giro.mjs` (gira de horizontal a vertical con cambio de pantalla, y pone la botella de pie con el cuello arriba y abajo).
+  Antes: salto de 6,9 unidades y 4,9 dentro del cristal. Después: nunca toca el cristal, salto máximo 0,37 por cuadro, escala mínima 0,97.
 
 ## Decisiones tomadas
 - Estilo: lo más realista posible (superar la foto de referencia).
@@ -45,6 +55,7 @@ Sin verificar todavía: rendimiento real en móvil, giroscopio en un móvil real
 
 ## Estructura
 - `src/` código fuente (módulos ES), `scripts/build.mjs` empaqueta todo en `docs/index.html` (un solo archivo).
+- `scripts/prueba_giro.mjs` prueba de regresión del barco al girar (`npm run prueba:giro`).
 - `scripts/shot.mjs` captura reproducible (`node scripts/shot.mjs salida.png 1600 740 "t=4&ui=0&clima=lluvia&roll=15"`).
 - Parámetros de URL: `t` (modo captura), `clima`, `mar`, `viento`, `roll`, `pitch`, `dpr`, `ui=0`, `dbg`.
 

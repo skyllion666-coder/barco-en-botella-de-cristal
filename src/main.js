@@ -167,4 +167,4 @@ if (modoCaptura) {
   requestAnimationFrame(bucle);
   window.__listo = true;
 }
-window.__api = { clima, sensores, agua, calidad, redibujar: () => dibujar(tTotal), camara, canal };
+window.__api = { clima, sensores, agua, calidad, redibujar: () => dibujar(tTotal), camara, canal, avanzar, flotacion, barco, botella };

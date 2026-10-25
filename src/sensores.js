@@ -22,6 +22,12 @@ export function crearSensores(lienzo) {
   const gCruda = new THREE.Vector3(0, -1, 0);
   const aCruda = new THREE.Vector3();
   let tieneOrientacion = false, ultimoSensor = 0, calibrar = false;
+  // Al rotar la pantalla el marco cambia 90° de golpe: durante TRANSICION segundos se suaviza más la gravedad,
+  // no se cuenta como sacudida y la recalibración espera a que el móvil se quede quieto.
+  const TRANSICION = 1.2;
+  const gFiltro = new THREE.Vector3(0, -1, 0);
+  let transicion = 0, calibrarTras = 0, anguloPrevio = null;
+  const alRotarPantalla = () => { transicion = TRANSICION; calibrarTras = TRANSICION; };
 
   const anguloPantalla = () => {
     // screen.orientation.angle es el estándar; window.orientation (iOS antiguo) tiene el signo contrario.
@@ -43,6 +49,9 @@ export function crearSensores(lienzo) {
   function alOrientar(e) {
     if (e.beta === null || e.gamma === null || e.beta === undefined) return;
     tieneOrientacion = true; s.sinSensor = false; ultimoSensor = performance.now(); s.fuente = 'sensor';
+    const ang = anguloPantalla();
+    if (anguloPrevio !== null && ang !== anguloPrevio) alRotarPantalla();
+    anguloPrevio = ang;
     const b = rad(e.beta), g = rad(e.gamma);
     // "abajo" en el marco del dispositivo (x derecha, y arriba, z fuera de la pantalla)
     dev.set(Math.cos(b) * Math.sin(g), -Math.sin(b), -Math.cos(b) * Math.cos(g));
@@ -121,7 +130,8 @@ export function crearSensores(lienzo) {
   });
   addEventListener('keydown', (e) => { teclas.add(e.key); });
   addEventListener('keyup', (e) => { teclas.delete(e.key); });
-  addEventListener('orientationchange', () => { calibrar = true; });
+  addEventListener('orientationchange', alRotarPantalla);
+  screen.orientation?.addEventListener?.('change', alRotarPantalla);
 
   const objetivoG = new THREE.Vector3();
   const rx = new THREE.Matrix4();
@@ -165,12 +175,18 @@ export function crearSensores(lienzo) {
       const r = rad(punt.roll), p = rad(punt.pitch);
       objetivoG.set(Math.sin(r) * Math.cos(p), -Math.cos(r) * Math.cos(p), Math.sin(p));
     }
-    // suavizado ligero (los sensores son ruidosos); la dinámica del agua añade su propia inercia
-    const k = 1 - Math.exp(-dt * 22);
-    s.g.lerp(objetivoG, k).normalize();
+    // suavizado ligero (los sensores son ruidosos); la dinámica del agua añade su propia inercia.
+    // Tras rotar la pantalla, más suave para que el salto de 90° del marco no lance el agua ni el barco.
+    const enTransicion = transicion > 0;
+    transicion = Math.max(0, transicion - dt);
+    if (calibrarTras > 0) { calibrarTras -= dt; if (calibrarTras <= 0) calibrar = true; }
+    // En la transición, dos etapas encadenadas: el giro arranca y frena suave en lugar de empezar a toda velocidad.
+    const k = 1 - Math.exp(-dt * (enTransicion ? 4 : 22));
+    gFiltro.lerp(objetivoG, k).normalize();
+    s.g.lerp(gFiltro, enTransicion ? k : 1).normalize();
 
     // energía de sacudida: variación angular rápida + aceleración lineal
-    const dg = s.g.distanceTo(anteriorG) / Math.max(dt, 1e-3);
+    const dg = enTransicion ? 0 : s.g.distanceTo(anteriorG) / Math.max(dt, 1e-3);
     anteriorG.copy(s.g);
     const a = aCruda.length();
     s.acel.copy(aCruda);

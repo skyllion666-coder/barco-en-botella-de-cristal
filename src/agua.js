@@ -395,7 +395,7 @@ export function crearAgua({ renderer, botella, texRuido, cubo, relleno = 0.30 })
   const f = { n: new THREE.Vector3(0, 1, 0), nVel: new THREE.Vector3(), d: 0, e1: new THREE.Vector3(1, 0, 0), e2: new THREE.Vector3(0, 0, 1), relleno, pend: 0 };
   const tmp = new THREE.Vector3();
 
-  function calcularPlano() {
+  function calcularPlano(dt) {
     // d tal que el volumen por debajo del plano n·x = d sea 'relleno' (cuantil de proyecciones)
     let mn = 1e9, mx = -1e9;
     const nx = f.n.x, ny = f.n.y, nz = f.n.z;
@@ -414,9 +414,29 @@ export function crearAgua({ renderer, botella, texRuido, cubo, relleno = 0.30 })
     while (b < NB && acc + hist[b] < objetivo) { acc += hist[b]; b++; }
     const frac = hist[b] > 0 ? (objetivo - acc) / hist[b] : 0;
     f.d = mn + (b + frac) / esc;
-    // base ortonormal del plano, con e1 siguiendo al eje X de la botella
-    const ax = Math.abs(f.n.x) < 0.92 ? tmp.set(1, 0, 0) : tmp.set(0, 0, 1);
-    f.e1.copy(ax).addScaledVector(f.n, -ax.dot(f.n)).normalize();
+    calcularBase(dt);
+  }
+
+  // Base ortonormal del plano, continua: e1 se transporta desde el cuadro anterior y gira poco a poco hacia la
+  // proyección del eje X de la botella mientras ese eje está bien definido (lejos de la botella de pie).
+  // Antes e1 saltaba 90° al pasar de un umbral y el barco y el oleaje se teletransportaban.
+  const tmp2 = new THREE.Vector3(), tmp3 = new THREE.Vector3();
+  function calcularBase(dt) {
+    const e1 = tmp2.copy(f.e1).addScaledVector(f.n, -f.e1.dot(f.n));
+    if (e1.lengthSq() < 1e-6) e1.set(0, 0, 1).addScaledVector(f.n, -f.n.z);
+    e1.normalize();
+    const eje = tmp3.set(1, 0, 0).addScaledVector(f.n, -f.n.x);
+    const l = eje.length();
+    // peso 1 con el eje bien definido (|n.x| < 0.89), 0 con la botella casi de pie (|n.x| > 0.99)
+    const peso = clamp((l - 0.15) / 0.30, 0, 1);
+    if (peso > 0) {
+      eje.divideScalar(l);
+      const ang = Math.atan2(tmp.crossVectors(e1, eje).dot(f.n), e1.dot(eje));
+      const giro = dt === undefined ? ang : Math.sign(ang) * Math.min(Math.abs(ang), 8 * peso * dt);
+      tmp.crossVectors(f.n, e1);
+      e1.multiplyScalar(Math.cos(giro)).addScaledVector(tmp, Math.sin(giro)).normalize();
+    }
+    f.e1.copy(e1);
     f.e2.crossVectors(f.n, f.e1).normalize();
   }
   calcularPlano();
@@ -445,7 +465,7 @@ export function crearAgua({ renderer, botella, texRuido, cubo, relleno = 0.30 })
       f.n.addScaledVector(f.nVel, h).normalize();
       f.nVel.addScaledVector(f.n, -f.nVel.dot(f.n)); // la velocidad es tangente a la esfera
     }
-    calcularPlano();
+    calcularPlano(dt);
     // impulso de chapoteo = velocidad del plano a lo largo de e1
     f.pend += clamp(f.nVel.dot(f.e1) * 0.006, -0.05, 0.05);
     return antes;
