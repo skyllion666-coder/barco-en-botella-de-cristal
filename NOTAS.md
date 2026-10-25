@@ -10,6 +10,9 @@ La imagen de referencia está en `referencia/botella-barco.png` (botella de cris
 - Opciones de **clima** dentro de la botella: lluvia, nieve y otras cosas parecidas (niebla, tormenta con rayos, sol...).
 - Ideas para más adelante: sonido ambiente (olas, lluvia), día y noche, distintos barcos, distintas botellas.
 
+## Estado
+El usuario ya tiene un **HTML empezado** (25-10-2026), trabajado en una sesión en la nube. **Partir de ese HTML, no rehacerlo desde cero.** Cuando esté en el repositorio, describirlo aquí.
+
 ## Plan por fases
 1. **Web prototipo** (HTML + JavaScript, three.js o canvas/WebGL). Pantalla horizontal, botella de cristal con refracción y reflejos, agua con olas que reaccionan a la inclinación, barco que cabecea.
 2. Sensores: `DeviceOrientationEvent` / `DeviceMotionEvent`. En iPhone pide permiso; en Android funciona directo. Ratón o teclado como respaldo en el PC.
