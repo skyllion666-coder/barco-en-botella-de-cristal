@@ -75,3 +75,6 @@ Probado en móvil real (GitHub Pages): al pasar de horizontal a vertical el barc
 ## Modelo real del barco (25-10-2026)
 Está en `assets/barco-ligero.glb` (créditos en `assets/CREDITOS.md`; hay que citar al autor en la app).
 Pendiente: cargarlo en `src/barco.js` en lugar del barco procedural, ajustar escala y orientación (mide ~3,1 × 7,7 × 6,5 unidades; el Draco necesita `DRACOLoader`), conectarlo con flotación, espuma y reflejo, y comprobar que no atraviesa el cristal. Las velas del modelo no tienen textura: darles material de lona.
+
+## Galeón alternativo (25-10-2026)
+`assets/galeon-ligero.glb` (84.733 caras, ~5 MB, mide ~6,3 × 16,1 × 12,1 unidades; casco oscuro y rojo, 3 palos + bauprés, velas con textura). Es más parecido a un barco de botella clásico que el Ottoman. Su autor y licencia están por confirmar (ver `assets/CREDITOS.md`).
