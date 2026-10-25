@@ -33,7 +33,7 @@ export function crearViento() {
     v.total = Math.max(0.02, base + v.racha + remolino + 0.3 * Math.min(1, sacudida) + 0.25 * Math.min(1, Math.abs(balanceo)));
     v.dir = 0.12 * Math.sin(t * 0.13) + 0.06 * Math.sin(t * 0.41 + 2);
     // la vela se llena deprisa con la racha y se vacía más despacio
-    v.llenado += (v.total - v.llenado) * (1 - Math.exp(-dt * (v.total > v.llenado ? 3.2 : 1.1)));
+    v.llenado += (v.total - v.llenado) * (1 - Math.exp(-dt * (v.total > v.llenado ? 6 : 1.6)));
     // con muy poco viento la tela cuelga floja y aletea
     v.flojo = Math.max(0, Math.min(1, 1 - v.llenado / 0.32));
     // las ondas corren más deprisa con más viento (y algo cuando la vela está floja)

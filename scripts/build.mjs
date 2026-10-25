@@ -7,6 +7,9 @@ import { fileURLToPath } from 'node:url';
 
 const raiz = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const minify = !process.argv.includes('--sin-minificar');
+// número de versión (archivo VERSION): va dentro de la app, en las direcciones de los barcos (?v=…) y en
+// docs/version.json, que la app consulta al abrirse para recargarse sola si hay una más nueva
+const VERSION = parseInt(readFileSync(resolve(raiz, 'VERSION'), 'utf8'), 10);
 
 const r = await build({
   entryPoints: [resolve(raiz, 'src/main.js')],
@@ -17,6 +20,7 @@ const r = await build({
   write: false,
   legalComments: 'none',
   logLevel: 'info',
+  define: { __VERSION__: String(VERSION) },
 });
 
 const js = r.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
@@ -24,7 +28,8 @@ const plantilla = readFileSync(resolve(raiz, 'src/index.template.html'), 'utf8')
 const html = plantilla.replace('/*__APP__*/', () => js);
 mkdirSync(resolve(raiz, 'docs'), { recursive: true });
 writeFileSync(resolve(raiz, 'docs/index.html'), html);
-console.log(`docs/index.html: ${(html.length / 1024).toFixed(0)} KB`);
+console.log(`docs/index.html: ${(html.length / 1024).toFixed(0)} KB (versión ${VERSION})`);
+writeFileSync(resolve(raiz, 'docs/version.json'), JSON.stringify({ version: VERSION }) + '\n');
 mkdirSync(resolve(raiz, 'docs/barcos'), { recursive: true });
 for (const id of ['galeon', 'ottoman']) {
   const destino = resolve(raiz, `docs/barcos/${id}.glb`);

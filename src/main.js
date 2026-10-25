@@ -36,12 +36,31 @@ const ruido = texRuido(256);
 // que también se usa si un modelo no se pudiera descargar).
 const BARCOS = { galeon: { nombre: 'Galeón', url: 'barcos/galeon.glb' }, ottoman: { nombre: 'Otomano', url: 'barcos/ottoman.glb' } };
 const cacheBarcos = {};
+
+// Versión (archivo VERSION, la pone build.mjs). Al abrir la app y al volver a ella, se mira docs/version.json sin
+// caché: si hay una versión más nueva publicada, la página se recarga sola con ?v=<nueva> (una vez por versión,
+// para no entrar en bucle si GitHub aún sirve la página vieja).
+const VERSION = __VERSION__;
+function comprobarVersion() {
+  if (!/^https?:/.test(location.protocol) || window.__barcosTexto) return;
+  fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((d) => {
+    const nueva = d && +d.version;
+    if (!nueva || nueva <= VERSION) return;
+    try { if (sessionStorage.getItem('barco-recargado') === String(nueva)) return; sessionStorage.setItem('barco-recargado', String(nueva)); } catch (_) { /* sin almacenamiento */ }
+    const u = new URL(location.href);
+    u.searchParams.set('v', nueva);
+    location.replace(u.toString());
+  }).catch(() => { /* sin conexión: se sigue con la que hay */ });
+}
+comprobarVersion();
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') comprobarVersion(); });
 // XMLHttpRequest y no fetch: así también funciona abriendo la página como archivo local.
 // En la versión para enlace de claude.ai (window.__barcosTexto) los barcos van como texto base64 (.b64.txt).
 const descargar = (url) => new Promise((ok, mal) => {
   const texto = !!window.__barcosTexto;
   const x = new XMLHttpRequest();
-  x.open('GET', texto ? url + '.b64.txt' : url); x.responseType = texto ? 'text' : 'arraybuffer';
+  // ?v=: cada versión pide sus barcos de nuevo (no los de la caché de una versión anterior)
+  x.open('GET', (texto ? url + '.b64.txt' : url) + '?v=' + VERSION); x.responseType = texto ? 'text' : 'arraybuffer';
   const datos = () => (texto ? Uint8Array.from(atob(x.response.trim()), (c) => c.charCodeAt(0)) : new Uint8Array(x.response));
   x.onload = () => (x.status === 200 || (x.status === 0 && x.response) ? ok(datos()) : mal(new Error('HTTP ' + x.status)));
   x.onerror = () => mal(new Error('sin conexión'));
@@ -202,7 +221,7 @@ if (params.get('ui') !== '0') {
     clima, sensores, audio,
     alAjustarCalidad: () => { calidad.modo = MODOS[(MODOS.indexOf(calidad.modo) + 1) % MODOS.length]; redimensionar(); },
     estadoCalidad: () => calidad.modo,
-    opciones, barcos, creditoBarco: barco.credito, rendimiento: () => ({ fps: rend.fps, resolucion: Math.round(dprActual() / dprDisp * 100) }),
+    opciones, barcos, version: VERSION, creditoBarco: barco.credito, rendimiento: () => ({ fps: rend.fps, resolucion: Math.round(dprActual() / dprDisp * 100) }),
   });
 }
 
@@ -242,7 +261,11 @@ function avanzar(dt, t) {
   salpicaduras.actualizar(dt, t, { viento: viento.total, barco: { vcab: flotacion.estado.vcab, proa: proaBarco, golpe: flotacion.estado.golpe, puntoBorda } });
   salpicaduras.color(clima.luzFinal, clima.bioluminiscencia);
   botellita.actualizar(dt, t, { viento: viento.total, barcoU: flotacion.estado.u, barcoV: flotacion.estado.v, radioBarco: 0.8 * 0.55 * (barco.info?.eslora ?? 8.4) + 1.2 });
-  gaviotas.actualizar(dt, t, { clima: clima.p, barco, centroU: flotacion.estado.u, centroV: flotacion.estado.v, viento: viento.total, graznar: () => audio?.gaviota() });
+  gaviotas.actualizar(dt, t, {
+    clima: clima.p, barco, centroU: flotacion.estado.u, centroV: flotacion.estado.v, viento: viento.total, dirViento: viento.estado.dir,
+    graznar: () => audio?.gaviota(),
+    alZambullir: (p, u, v) => { salpicaduras.salpicar(p); if (impulsos.length < 8) impulsos.push([u, v, 0.05, 0.2]); },
+  });
   agua.ponerBioluminiscencia(clima.bioluminiscencia);
 }
 

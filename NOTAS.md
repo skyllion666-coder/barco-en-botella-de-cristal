@@ -125,6 +125,20 @@ Probado en móvil real (GitHub Pages): al pasar de horizontal a vertical el barc
   Borgoña (la de la Armada de los galeones) en trinquete y mesana; 1,7 veces más grandes. Las dibuja `scripts/bandera.py`.
 - `flotacion.js` cuenta con lo que se desplazan velas y banderas, a los dos lados, al vigilar el cristal.
 
+### Versión y caché (25-10-2026)
+- El usuario veía versiones viejas en GitHub Pages por la caché. Archivo `VERSION` (ahora 12): `build.mjs` lo mete en la app, en las
+  descargas de los barcos (`barcos/galeon.glb?v=12`) y en `docs/version.json`. Ajustes muestra «Versión N». Al abrir la app (y al volver a
+  ella) se consulta `version.json` sin caché; si hay una más nueva, la página se recarga sola con `?v=<nueva>` (una vez por versión).
+  GitHub Pages tarda 1-10 min en publicar tras subir (pestaña Actions).
+
+### Ronda 4 (25-10-2026, versión 13)
+- Velas: sin viento quedan rectas (planas, casi sin pliegues ni caída); con viento se inflan mucho más (bolsa ~2×). La forma sigue un
+  muelle poco amortiguado (`barcoModelo.js`, `uForma`): al entrar la racha la lona se llena de golpe y rebota. Llenado más rápido
+  (`viento.js`), flameo de transición, respiración con las rachas y temblor de la baluma más fuertes. Cabos: tensos de golpe con la racha.
+- Gaviotas: dos, con vuelo libre (rutas a los lados del barco rodeándolo por proa o popa, sin cruzar las velas), velocidad que cambia al
+  subir o bajar, aleteo con bajada rápida y planeos en «M», cabeceo y alabeo, cernido cara al viento, a veces una persigue a la otra;
+  toma de tierra frenando para posarse. Prueba (simulación de 150 s con giros y lluvia): nunca tocan el cristal, sin saltos.
+
 ### Sorpresas (no contárselas al usuario hasta que las vea)
 - Bioluminiscencia: de noche el agua agitada, la estela, las burbujas y las salpicaduras brillan en azul verdoso.
 - Estrellas fugaces de noche, cada 6-16 s, dentro de la botella.
@@ -134,7 +148,9 @@ Probado en móvil real (GitHub Pages): al pasar de horizontal a vertical el barc
 - Botellita con mensaje flotando en el agua (`botellita.js`): la llevan las olas y el viento; al tocarla se abre un pergamino con un dicho marinero.
 - Gaviotas (`gaviotas.js`): tres vuelan alrededor del barco con buen tiempo (aleteo y planeo en «M», se inclinan en los giros, graznan de
   vez en cuando con sonido); con lluvia, tormenta, nieve o de noche bajan a posarse en el barco (sitios hallados con rayos: castillos,
-  vergas) y se mecen con él. La vuelta se encoge si la botella está de pie; nunca tocan el cristal (prueba: holgura mínima 1,0).
+  vergas) y se mecen con él. Nunca tocan el cristal.
+- Pesca: cada 20-45 s una gaviota se tira en picado al agua, salpica y deja ondas, y sube con un pececillo plateado en el pico que
+  coletea hasta que se lo traga.
 
 ## Decisiones tomadas
 - Estilo: lo más realista posible (superar la foto de referencia).
@@ -154,6 +170,7 @@ Probado en móvil real (GitHub Pages): al pasar de horizontal a vertical el barc
 - Parámetros de URL: `t` (modo captura), `rayo=1` (relámpago en la captura), `ola=1` (ola grande), `arcoiris=1`, `fugaz=1` (estrella fugaz), `clima`, `mar`, `viento`, `roll`, `pitch`, `dpr`, `ui=0`, `dbg`.
 
 ## Reglas
+- Subir el número de `VERSION` en cada entrega al usuario (zip y enlace) y decírselo.
 - Todo el texto de la app y la conversación, en español.
 - Mantener el proyecto ligero (menos de 100 MB) para poder subirlo a sesiones en la nube.
 - Las velas SIEMPRE se mueven con el aire (viento del clima y del movimiento del móvil), y todo el barco, velas y cuerdas debe ser lo más realista posible (petición expresa del usuario).

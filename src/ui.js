@@ -48,7 +48,7 @@ function el(tag, attrs = {}, hijos = []) {
   return e;
 }
 
-export function crearUI({ clima, sensores, audio, alAjustarCalidad, estadoCalidad, opciones = {}, rendimiento, barcos, creditoBarco = '' }) {
+export function crearUI({ clima, sensores, audio, alAjustarCalidad, estadoCalidad, opciones = {}, rendimiento, barcos, version, creditoBarco = '' }) {
   const estilo = el('style'); estilo.textContent = CSS; document.head.append(estilo);
   const raiz = el('div', { id: 'ui' });
   document.body.append(raiz);
@@ -89,6 +89,7 @@ export function crearUI({ clima, sensores, audio, alAjustarCalidad, estadoCalida
   const credito = el('div', { class: 'nota', texto: '' });
   const ponerCredito = (t) => { credito.textContent = t ? 'Barco: ' + t : ''; credito.style.display = t ? '' : 'none'; };
   ponerCredito(creditoBarco);
+  const notaVersion = el('div', { class: 'nota', texto: version ? `Versión ${version}` : '' });
   // selector de barco: pasa al siguiente de la lista
   const bBarco = el('button', { class: 'btn', type: 'button', texto: 'Barco', onclick: async () => {
     if (!barcos) return;
@@ -104,7 +105,7 @@ export function crearUI({ clima, sensores, audio, alAjustarCalidad, estadoCalida
     el('div', { class: 'fila' }, [bSonido, bPantalla]),
     el('div', { class: 'fila' }, [bCalidad, bHora]),
     el('div', { class: 'fila' }, [bBarco, bVibrar]),
-    estadoSensor, nota, notaSensor, credito,
+    estadoSensor, nota, notaSensor, credito, notaVersion,
   ]);
   const engranaje = el('button', { id: 'engranaje', class: 'ui-vidrio', type: 'button', 'aria-label': 'Ajustes', texto: '⚙️', onclick: () => { panel.classList.toggle('abierto'); recordar(); } });
   const sonido = el('button', { id: 'sonido', class: 'ui-vidrio', type: 'button', 'aria-label': 'Sonido', texto: '🔇', onclick: () => { if (!audio) return; audio.alternar(); sincronizar(); recordar(); } });

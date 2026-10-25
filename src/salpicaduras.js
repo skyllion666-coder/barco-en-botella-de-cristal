@@ -113,6 +113,8 @@ export function crearSalpicaduras({ escena, agua, botella }) {
 
   return {
     actualizar,
+    // salpicadura suelta (p. ej. una gaviota que se tira al agua)
+    salpicar: (p, cuantas = 14, fuerza = 0.9) => lanzar(p, D.set(0, 0, 0), cuantas, fuerza, 0),
     // la espuma pulverizada recoge mucha luz: clara incluso con el cielo oscuro de la tormenta
     color: (luz, biolum = 0) => mat.uniforms.uColor.value.setRGB(0.88, 0.94, 1.0).multiplyScalar(1.7 * Math.max(0.65, (luz.r + luz.g + luz.b) / 3))
       .lerp(new THREE.Color(0.1, 1.4, 1.9), biolum * 0.8), // de noche, las gotas también brillan

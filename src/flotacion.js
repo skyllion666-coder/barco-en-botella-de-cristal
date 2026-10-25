@@ -24,13 +24,13 @@ function puntosExtremos(grupo, N = 160) {
     for (let i = 0; i < at.position.count; i++) {
       p.fromBufferAttribute(at.position, i);
       // velas y banderas del modelo: hasta dónde llegan con el viento (ver barcoModelo.js), a un lado y a otro:
-      // velas: hinchado (hasta 0,12 × _EMPUJE) más flameo y pliegues del borde libre (hasta ~7 % del tamaño);
+      // velas: hinchado (hasta 0,27 × _EMPUJE, con el rebote) más flameo del borde libre (hasta ~10 % del tamaño);
       // banderas: ondeo de hasta ~18 % de su largo
       if (emp) {
         d.fromBufferAttribute(emp, i);
         const l = d.length() || 1;
-        const fl = vela ? 0.07 * vela.getZ(i) * (0.15 + 0.85 * vela.getX(i) ** 2) : 0.18 * l * (asta ? asta.getW(i) : 1);
-        const hin = vela ? 0.12 : 0;
+        const fl = vela ? 0.10 * vela.getZ(i) * (0.15 + 0.85 * vela.getX(i) ** 2) : 0.18 * l * (asta ? asta.getW(i) : 1);
+        const hin = vela ? 0.27 : 0;
         v.copy(p).addScaledVector(d, hin + fl / l).applyMatrix4(o.matrix); verts.push(v.x, v.y, v.z);
         v.copy(p).addScaledVector(d, -fl / l).applyMatrix4(o.matrix); verts.push(v.x, v.y, v.z);
         continue;
