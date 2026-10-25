@@ -71,3 +71,7 @@ Probado en móvil real (GitHub Pages): al pasar de horizontal a vertical el barc
 ## Reglas
 - Todo el texto de la app y la conversación, en español.
 - Mantener el proyecto ligero (menos de 100 MB) para poder subirlo a sesiones en la nube.
+
+## Modelo real del barco (25-10-2026)
+Está en `assets/barco-ligero.glb` (créditos en `assets/CREDITOS.md`; hay que citar al autor en la app).
+Pendiente: cargarlo en `src/barco.js` en lugar del barco procedural, ajustar escala y orientación (mide ~3,1 × 7,7 × 6,5 unidades; el Draco necesita `DRACOLoader`), conectarlo con flotación, espuma y reflejo, y comprobar que no atraviesa el cristal. Las velas del modelo no tienen textura: darles material de lona.
