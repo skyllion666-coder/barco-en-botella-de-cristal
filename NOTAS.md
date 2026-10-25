@@ -79,7 +79,7 @@ Probado en móvil real (GitHub Pages): al pasar de horizontal a vertical el barc
 - Prueba de giro con el modelo: nunca toca el cristal, sin saltos, sin encogerse.
 
 ### Galeón (25-10-2026)
-- El usuario prefiere el galeón «galeone_ii» (`assets/galeon-ligero.glb`): ahora es el barco de la app. **Autor y licencia por confirmar** (posible «Ship Y», Sketchfab, CC-BY): no publicar hasta saberlo.
+- El usuario prefiere el galeón «galeone_ii» (`assets/galeon-ligero.glb`): ahora es el barco de la app. **Autor y licencia confirmados:** «Galeone II», de gogiart (Sketchfab), CC-BY 4.0; se cita en Ajustes y en el README (ver `assets/CREDITOS.md`).
 - `preparar_barco.mjs` admite varios modelos (`galeon` por defecto, `ottoman`). Para el galeón: centrado en la huella del casco, flotación en y = 1,3 del original,
   altura 6,7 (cabe tumbado con la botella de pie), 13 velas con hinchado y 3 banderas que ondean, 148 → 42 mallas. `docs/index.html` pasa a ~3,9 MB.
 - Sus texturas vienen a 256 px (se aligeraron antes de subirlo): con el `galeone_ii.glb` original (43 MB) se podrían usar texturas mejores.
