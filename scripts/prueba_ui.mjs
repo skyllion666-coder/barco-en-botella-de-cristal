@@ -2,7 +2,7 @@
 import { createRequire } from 'node:module';
 const { chromium } = createRequire(import.meta.url)('/opt/node-tools/node_modules/playwright');
 const salida = process.argv[2] || '/tmp/ui.png';
-const b = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'] });
+const b = await chromium.launch({ args: ['--allow-file-access-from-files', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'] });
 const p = await b.newPage({ viewport: { width: 960, height: 440 } });
 const errores = [];
 p.on('console', (m) => { if (['error', 'warning'].includes(m.type())) errores.push(m.text().slice(0, 300)); });

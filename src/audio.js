@@ -105,6 +105,28 @@ export function sintetizarTrueno(ctx, destino, t0, cerca = 0.5) {
   return dur;
 }
 
+// Campana de bronce de a bordo: parciales inarmónicos de campana (hum, fundamental, tercera menor, quinta,
+// nominal y superiores), cada uno con su caída, más el golpe del badajo. Devuelve cuánto dura.
+export function sonarCampana(ctx, destino, t0, fuerza = 1) {
+  const f0 = 523.25; // do5: una campana de barco pequeña
+  const parciales = [[0.5, 0.35, 4.5], [1, 0.5, 3.2], [1.19, 0.28, 2.6], [1.5, 0.22, 2.2], [2.0, 0.42, 1.9], [2.51, 0.18, 1.3], [2.98, 0.12, 1.0], [4.07, 0.08, 0.6]];
+  const salida = ctx.createGain(); salida.gain.value = 0.32 * fuerza; salida.connect(destino);
+  for (const [r, a, cae] of parciales) {
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.value = f0 * r * (1 + (Math.random() - 0.5) * 0.002);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(a, t0 + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0008, t0 + cae);
+    o.connect(g); g.connect(salida); o.start(t0); o.stop(t0 + cae + 0.05);
+  }
+  // golpe metálico del badajo
+  const n = ctx.createBufferSource(); n.buffer = bufferRuido(ctx, 0.08, 'blanco');
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 3800; bp.Q.value = 1.2;
+  const gn = ctx.createGain(); gn.gain.setValueAtTime(0.25, t0); gn.gain.exponentialRampToValueAtTime(0.001, t0 + 0.06);
+  n.connect(bp); bp.connect(gn); gn.connect(salida); n.start(t0);
+  return 4.5;
+}
+
 export function crearAudio() {
   let ctx = null, maestro = null, nodos = null;
   const est = { activo: false, siguienteCrujido: 3, t: 0 };
@@ -216,5 +238,15 @@ export function crearAudio() {
     }
   }
 
-  return { get activo() { return est.activo; }, alternar, actualizar, trueno, sintetizarTrueno };
+  // Campanas de a bordo: 'golpes' toques, por parejas (ding-ding … ding-ding), como en las guardias de un barco.
+  function campanas(golpes) {
+    if (!ctx || !est.activo || golpes < 1) return;
+    let t = ctx.currentTime + 0.1;
+    for (let i = 0; i < golpes; i++) {
+      sonarCampana(ctx, maestro, t, 0.9 + Math.random() * 0.15);
+      t += i % 2 === 0 ? 0.38 : 1.05;
+    }
+  }
+
+  return { get activo() { return est.activo; }, alternar, actualizar, trueno, sintetizarTrueno, campanas, sonarCampana };
 }

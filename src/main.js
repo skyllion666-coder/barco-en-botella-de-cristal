@@ -8,8 +8,6 @@ import { crearAgua } from './agua.js';
 import { texRuido } from './texturas.js';
 import { crearBarco } from './barco.js';
 import { crearBarcoModelo } from './barcoModelo.js';
-import datosGaleon from '../assets/barco-galeon.glb';
-import datosOttoman from '../assets/barco-ottoman.glb';
 import { crearFlotacion } from './flotacion.js';
 import { crearSensores } from './sensores.js';
 import { crearClima } from './clima.js';
@@ -19,6 +17,7 @@ import { crearAudio } from './audio.js';
 import { crearGotas } from './gotas.js';
 import { crearViento } from './viento.js';
 import { crearSalpicaduras } from './salpicaduras.js';
+import { crearBotellita } from './botellita.js';
 
 const params = new URLSearchParams(location.search);
 const num = (k, d) => (params.has(k) ? parseFloat(params.get(k)) : d);
@@ -31,22 +30,35 @@ const { cubo, pmrem } = crearCubemapEntorno(canal.renderer, 512);
 const botella = crearBotella();
 const mundo = crearMundo({ pmrem });
 const ruido = texRuido(256);
-// Barcos disponibles, incrustados en la página. Se cambian desde Ajustes (se recuerda la elección);
-// ?barco=galeon|ottoman|procedural fuerza uno (procedural = el generado por código, también si un modelo fallara).
-const BARCOS = { galeon: { nombre: 'Galeón', datos: datosGaleon }, ottoman: { nombre: 'Otomano', datos: datosOttoman } };
+// Barcos disponibles: archivos aparte (docs/barcos/) que se descargan solo al usarlos. Se cambian desde Ajustes
+// (se recuerda la elección); ?barco=galeon|ottoman|procedural fuerza uno (procedural = el generado por código,
+// que también se usa si un modelo no se pudiera descargar).
+const BARCOS = { galeon: { nombre: 'Galeón', url: 'barcos/galeon.glb' }, ottoman: { nombre: 'Otomano', url: 'barcos/ottoman.glb' } };
 const cacheBarcos = {};
+// XMLHttpRequest y no fetch: así también funciona abriendo la página como archivo local
+const descargar = (url) => new Promise((ok, mal) => {
+  const x = new XMLHttpRequest();
+  x.open('GET', url); x.responseType = 'arraybuffer';
+  x.onload = () => (x.status === 200 || (x.status === 0 && x.response) ? ok(new Uint8Array(x.response)) : mal(new Error('HTTP ' + x.status)));
+  x.onerror = () => mal(new Error('sin conexión'));
+  x.send();
+});
+const aviso = document.getElementById('cargando');
 async function cargarBarco(id) {
   if (cacheBarcos[id]) return cacheBarcos[id];
   let b;
   if (!BARCOS[id]) b = crearBarco();
   else {
-    try { b = await crearBarcoModelo(BARCOS[id].datos); } catch (e) { console.warn('[app] modelo del barco no disponible:', e); b = crearBarco(); }
+    if (aviso) aviso.style.opacity = '1';
+    try { b = await crearBarcoModelo(await descargar(BARCOS[id].url)); } catch (e) { console.warn('[app] modelo del barco no disponible:', e); b = crearBarco(); }
+    if (aviso) aviso.style.opacity = '0';
   }
   return (cacheBarcos[id] = b);
 }
 const barcoGuardado = (() => { try { return JSON.parse(localStorage.getItem('barco-botella-v2') || '{}').barco; } catch (_) { return null; } })();
 let idBarco = params.get('barco') || (BARCOS[barcoGuardado] ? barcoGuardado : 'galeon');
 let barco = await cargarBarco(idBarco);
+if (aviso) aviso.style.opacity = '0';
 mundo.interior.escena.add(barco.grupo); // el barco vive dentro de la botella, con la luz del clima
 
 const U = {
@@ -62,6 +74,15 @@ const gotas = crearGotas({ renderer: canal.renderer, agua, botella });
 const viento = crearViento();
 const salpicaduras = crearSalpicaduras({ escena: mundo.interior.escena, agua, botella });
 const proaBarco = new THREE.Vector3();
+const botellita = crearBotellita({ escena: mundo.interior.escena, agua, botella });
+// un punto al azar de la borda del barco (y hacia fuera), en el marco de la botella: por ahí cae el agua
+const bordaP = new THREE.Vector3(), bordaD = new THREE.Vector3();
+function puntoBorda() {
+  const I = barco.info || {}, lado = Math.random() < 0.5 ? -1 : 1;
+  bordaP.set((Math.random() - 0.5) * 0.8 * (I.eslora ?? 8.4), I.cubierta ?? 1.2, lado * 0.5 * (I.manga ?? 1.7)).applyMatrix4(barco.grupo.matrix);
+  bordaD.set(0, -0.2, lado).transformDirection(barco.grupo.matrix);
+  return { p: bordaP, fuera: bordaD };
+}
 let reflejo = crearReflejo({ interior: mundo.interior, barco, renderer: canal.renderer });
 
 const camara = new THREE.PerspectiveCamera(20, 2, 5, 220);
@@ -139,6 +160,37 @@ const barcos = {
   cambiar: cambiarBarco,
 };
 
+// Tocar la botellita que flota: se abre su mensaje. Tocar el barco: suena su campana.
+const rayoToque = new THREE.Raycaster(), ndcToque = new THREE.Vector2();
+let inicioToque = null;
+lienzo.addEventListener('pointerdown', (e) => { inicioToque = [e.clientX, e.clientY]; });
+lienzo.addEventListener('pointerup', (e) => {
+  if (!inicioToque || Math.hypot(e.clientX - inicioToque[0], e.clientY - inicioToque[1]) > 12) return; // fue un arrastre
+  const r = lienzo.getBoundingClientRect();
+  ndcToque.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  rayoToque.setFromCamera(ndcToque, camara);
+  if (botellita.tocada(rayoToque.ray)) { ui?.mostrarMensaje(botellita.leer()); return; }
+  // tocar el barco: su campana (con el sonido activado)
+  esferaBarco.center.set(0, (barco.info?.alturaMax ?? 6) * 0.4, 0).applyMatrix4(barco.grupo.matrix);
+  esferaBarco.radius = 0.8 * 0.45 * (barco.info?.eslora ?? 8.4);
+  if (rayoToque.ray.intersectsSphere(esferaBarco)) audio?.campanas(2);
+});
+const esferaBarco = new THREE.Sphere();
+
+// Campanas de a bordo según la hora real: cada media hora, de 1 a 8 toques según la guardia de 4 horas
+// (12:30 → 1, 13:00 → 2 … 16:00 → 8). Solo con el sonido activado.
+let ultimaCampana = '';
+function revisarCampanas() {
+  const d = new Date(), m = d.getMinutes();
+  if ((m !== 0 && m !== 30) || d.getSeconds() > 20) return;
+  const clave = d.toDateString() + d.getHours() + ':' + m;
+  if (clave === ultimaCampana) return;
+  ultimaCampana = clave;
+  const golpes = ((d.getHours() % 4) * 2 + (m === 30 ? 1 : 0)) || 8;
+  audio?.campanas(golpes);
+}
+setInterval(revisarCampanas, 5000);
+
 const rend = { fps: 0, cuadros: 0, desde: 0 }; // fotogramas por segundo medidos (se muestran en Ajustes)
 if (params.get('ui') !== '0') {
   ui = crearUI({
@@ -182,8 +234,9 @@ function avanzar(dt, t) {
   barco.actualizar(t, viento.estado);
   // salpicaduras de las crestas que rompen y de la proa al golpear las olas
   proaBarco.set((barco.info?.eslora ?? 8.4) * 0.5, 0.25, 0).applyMatrix4(barco.grupo.matrix);
-  salpicaduras.actualizar(dt, t, { viento: viento.total, barco: { vcab: flotacion.estado.vcab, proa: proaBarco } });
+  salpicaduras.actualizar(dt, t, { viento: viento.total, barco: { vcab: flotacion.estado.vcab, proa: proaBarco, golpe: flotacion.estado.golpe, puntoBorda } });
   salpicaduras.color(clima.luzFinal, clima.bioluminiscencia);
+  botellita.actualizar(dt, t, { viento: viento.total, barcoU: flotacion.estado.u, barcoV: flotacion.estado.v, radioBarco: 0.8 * 0.55 * (barco.info?.eslora ?? 8.4) + 1.2 });
   agua.ponerBioluminiscencia(clima.bioluminiscencia);
 }
 
@@ -245,6 +298,6 @@ if (modoCaptura) {
   window.__listo = true;
 }
 window.__api = {
-  clima, sensores, agua, calidad, redibujar: (dt) => dibujar(tTotal, dt), camara, canal, avanzar, botella, audio, gotas, cambiarBarco, viento, salpicaduras,
+  clima, sensores, agua, calidad, redibujar: (dt) => dibujar(tTotal, dt), camara, canal, avanzar, botella, audio, gotas, cambiarBarco, viento, salpicaduras, botellita,
   get flotacion() { return flotacion; }, get barco() { return barco; },
 };

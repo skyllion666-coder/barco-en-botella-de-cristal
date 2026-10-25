@@ -30,6 +30,12 @@ const CSS = `
 #activar { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); pointer-events: auto; padding: 16px 26px; border-radius: 16px; font-size: 16px; border: 0; color: inherit; cursor: pointer; display: none; text-align: center; }
 #activar small { display: block; font-size: 12px; opacity: .7; margin-top: 4px; }
 .oculto { opacity: 0 !important; }
+#pergamino { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) scale(.92); width: min(82vw, 440px); padding: 26px 30px 22px; border-radius: 6px;
+  background: radial-gradient(ellipse at 50% 40%, #f3e6c4 0%, #e6d2a2 70%, #cdb27a 100%); color: #3b2a16; box-shadow: 0 12px 40px rgba(0,0,0,.55), inset 0 0 40px rgba(120,80,30,.35);
+  font: italic 500 clamp(17px, 2.6vw, 22px)/1.45 'Segoe Script', 'Bradley Hand', 'Snell Roundhand', 'URW Chancery L', cursive; text-align: center;
+  opacity: 0; pointer-events: none; transition: opacity .6s, transform .6s; }
+#pergamino.abierto { opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; }
+#pergamino small { display: block; margin-top: 14px; font: 500 11px system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; opacity: .55; font-style: normal; }
 .oculto, .oculto * { pointer-events: none !important; }
 `;
 
@@ -109,7 +115,10 @@ export function crearUI({ clima, sensores, audio, alAjustarCalidad, estadoCalida
     'Toca para activar el movimiento', el('small', { texto: 'Se usará el giroscopio de tu móvil' }),
   ]);
   const girar = el('div', { id: 'girar', class: 'ui-vidrio', texto: '↻  Gira el móvil en horizontal' });
-  raiz.append(dock, ajustes, aviso, activar, girar);
+  // pergamino con el mensaje de la botellita (se cierra al tocarlo)
+  const textoPergamino = el('div', { texto: '' });
+  const pergamino = el('div', { id: 'pergamino', onclick: () => pergamino.classList.remove('abierto') }, [textoPergamino, el('small', { texto: 'Mensaje encontrado en una botella · toca para cerrar' })]);
+  raiz.append(dock, ajustes, aviso, activar, girar, pergamino);
   const revisarGiro = () => { girar.style.display = innerHeight > innerWidth * 1.05 ? 'block' : 'none'; };
   addEventListener('resize', revisarGiro); revisarGiro();
 
@@ -174,5 +183,7 @@ export function crearUI({ clima, sensores, audio, alAjustarCalidad, estadoCalida
   restaurar();
   sincronizar();
   setInterval(sincronizar, 1000);
-  return { sincronizar, recordar, ponerCredito };
+  function mostrarMensaje(texto) { textoPergamino.textContent = texto; pergamino.classList.add('abierto'); }
+
+  return { sincronizar, recordar, ponerCredito, mostrarMensaje };
 }

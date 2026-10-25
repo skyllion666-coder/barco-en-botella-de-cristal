@@ -1,6 +1,7 @@
-// Empaqueta src/main.js en un único docs/index.html (JS inline y minificado).
+// Empaqueta src/main.js en docs/index.html (JS inline y minificado) y copia los barcos a docs/barcos/
+// (la app descarga solo el que se usa).
 import { build } from 'esbuild';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, copyFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -11,7 +12,6 @@ const r = await build({
   entryPoints: [resolve(raiz, 'src/main.js')],
   bundle: true,
   format: 'esm',          // módulo: permite esperar a la carga del modelo del barco
-  loader: { '.glb': 'binary' }, // el modelo va incrustado en la página
   minify,
   target: 'es2022',       // Safari 15+, Chrome 89+ (await en el nivel superior)
   write: false,
@@ -25,6 +25,12 @@ const html = plantilla.replace('/*__APP__*/', () => js);
 mkdirSync(resolve(raiz, 'docs'), { recursive: true });
 writeFileSync(resolve(raiz, 'docs/index.html'), html);
 console.log(`docs/index.html: ${(html.length / 1024).toFixed(0)} KB`);
+mkdirSync(resolve(raiz, 'docs/barcos'), { recursive: true });
+for (const id of ['galeon', 'ottoman']) {
+  const destino = resolve(raiz, `docs/barcos/${id}.glb`);
+  copyFileSync(resolve(raiz, `assets/barco-${id}.glb`), destino);
+  console.log(`docs/barcos/${id}.glb: ${(statSync(destino).size / 1024).toFixed(0)} KB`);
+}
 
 // Variante para publicar como Artifact: sin <html>/<head>/<body> (los añade la plataforma).
 const idx = process.argv.indexOf('--artefacto');

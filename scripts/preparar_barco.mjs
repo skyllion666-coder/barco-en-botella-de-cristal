@@ -16,7 +16,7 @@ import { dedup, prune, weld, join, quantize, reorder, simplifyPrimitive, transfo
 import { MeshoptSimplifier, MeshoptEncoder } from 'meshoptimizer';
 import draco3d from 'draco3dgltf';
 import { spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync, mkdtempSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, statSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join as unirRuta, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,18 +24,21 @@ import { fileURLToPath } from 'node:url';
 const raiz = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 const MODELOS = {
-  // Galeón de tres palos (el que prefiere el usuario). Llega ya aligerado (84.733 caras, texturas de 256 px).
+  // Galeón de tres palos («Galeone II», de gogiart, CC-BY 4.0), el que prefiere el usuario. Se prepara desde el
+  // original (assets/galeone_ii.glb, 891.289 caras); si no está, desde la versión aligerada.
   galeon: {
-    entrada: 'assets/galeon-ligero.glb', salida: 'assets/barco-galeon.glb',
+    entrada: ['assets/galeone_ii.glb', 'assets/galeon-ligero.glb'], salida: 'assets/barco-galeon.glb',
     lineaAgua: 1.3,            // donde acaba el fondo rojo y empieza la madera oscura
     alturaFinal: 6.7,          // altura sobre el agua en unidades de la app (luego ESCALA_BARCO = 0.8 en flotacion.js);
                                // con esta altura el galeón, más largo, cabe tumbado con la botella de pie
     velas: ['acmat_33.003', 'acmat_26.003', 'acmat_22.003'],
     banderas: ['acmat_57', 'acmat_14.003', 'acmat_13.003'],
     asta: 'proa',              // las banderas cuelgan hacia popa desde su borde de proa
-    simplificar: false, textura: null,
+    simplificar: { ratio: 0.08, error: 0.0016, min: 1200 }, textura: 1024,
+    // el rojo del casco y los remates pasa a marrón oscuro (no en banderas ni escudos)
+    marron: { excepto: ['acmat_57', 'acmat_14.003', 'acmat_13.003', ...Array.from({ length: 15 }, (_, i) => `acmat_${41 + i}.003`)] },
     rumbo: -0.30,
-    credito: 'Galeón «galeone_ii» (autor y licencia por confirmar). Modificado.',
+    credito: '«Galeone II», de gogiart (Sketchfab), licencia CC-BY 4.0. Modificado.',
     colores: {},
   },
   // Velero mercante otomano de dos palos, de polygora (Sketchfab, CC-BY).
@@ -43,7 +46,7 @@ const MODELOS = {
     entrada: 'assets/barco-original.glb', salida: 'assets/barco-ottoman.glb',
     lineaAgua: 0.03, alturaFinal: 7.0,
     velas: ['Sail'], banderas: [], asta: 'proa',
-    simplificar: true, textura: 1024,
+    simplificar: { ratio: 0.22, error: 0.0012, min: 1500 }, textura: 1024,
     rumbo: -0.30,
     credito: '«Ottoman Coastal Trade Tall Ship», de polygora (Sketchfab), licencia CC-BY. Modificado.',
     colores: {
@@ -63,7 +66,10 @@ await MeshoptSimplifier.ready; await MeshoptEncoder.ready;
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({
   'meshopt.encoder': MeshoptEncoder, 'draco3d.decoder': await draco3d.createDecoderModule(),
 });
-const doc = await io.read(resolve(raiz, C.entrada));
+const entrada = [].concat(C.entrada).map((e) => resolve(raiz, e)).find((e) => existsSync(e));
+if (!entrada) throw new Error('no está el modelo: ' + [].concat(C.entrada).join(' ni '));
+console.log('entrada:', entrada.replace(raiz + '/', ''));
+const doc = await io.read(entrada);
 const root = doc.getRoot();
 const escena = root.listScenes()[0];
 const contar = () => root.listMeshes().reduce((s, m) => s + m.listPrimitives().reduce((a, p) => a + (p.getIndices()?.getCount() ?? p.getAttribute('POSITION').getCount()) / 3, 0), 0);
@@ -104,17 +110,20 @@ function vertices() {
 // centrar la huella en el origen: la flotación gira el barco sobre él y mide las olas a su alrededor
 {
   const h = vertices().filter((q) => q[1] > -0.3 && q[1] < 0.4);
-  const cx = (Math.min(...h.map((q) => q[0])) + Math.max(...h.map((q) => q[0]))) / 2;
-  const cz = (Math.min(...h.map((q) => q[2])) + Math.max(...h.map((q) => q[2]))) / 2;
+  const ext = (c) => h.reduce(([a, b], q) => [Math.min(a, q[c]), Math.max(b, q[c])], [Infinity, -Infinity]);
+  const [x0, x1] = ext(0), [z0, z1] = ext(2);
+  const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
   for (const m of root.listMeshes()) transformMesh(m, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -cx, 0, -cz, 1]);
 }
 const verts = vertices();
 const total = getBounds(escena);
+// mínimos y máximos con bucles (con cientos de miles de vértices, Math.min(...lista) desborda la pila)
+const minimo = (l, f) => l.reduce((a, q) => Math.min(a, f(q)), Infinity), maximo = (l, f) => l.reduce((a, q) => Math.max(a, f(q)), -Infinity);
 const huella = verts.filter((q) => q[1] > -0.3 && q[1] < 0.4);
-const mn = [0, 1, 2].map((c) => Math.min(...huella.map((q) => q[c]))), mx = [0, 1, 2].map((c) => Math.max(...huella.map((q) => q[c])));
-mn[1] = Math.min(...verts.map((q) => q[1]));
+const mn = [0, 1, 2].map((c) => minimo(huella, (q) => q[c])), mx = [0, 1, 2].map((c) => maximo(huella, (q) => q[c]));
+mn[1] = minimo(verts, (q) => q[1]);
 const bajo = (q) => q[1] < 0.42 * total.max[1] && Math.abs(q[2]) < 0.6;
-const alturaEn = (filtro) => Math.max(...verts.filter((q) => bajo(q) && filtro(q)).map((q) => q[1]));
+const alturaEn = (filtro) => maximo(verts.filter((q) => bajo(q) && filtro(q)), (q) => q[1]);
 mx[1] = alturaEn((q) => q[0] > mn[0] + 1 && q[0] < mx[0] - 1); // regala en el centro del barco
 const farolillos = [
   [mn[0] + 0.3, alturaEn((q) => q[0] < mn[0] + 0.8) + 0.25, 0],
@@ -123,11 +132,13 @@ const farolillos = [
 
 // ---- 3) simplificar solo lo pesado (error relativo pequeño: no cambia la silueta)
 if (C.simplificar) {
+  const { ratio, error, min } = C.simplificar;
   for (const m of root.listMeshes()) for (const p of m.listPrimitives()) {
     const mat = p.getMaterial()?.getName() || '';
-    if (esVela(p) || esBandera(p) || mat.startsWith('Rope') || p.getIndices().getCount() / 3 < 1500) continue;
-    simplifyPrimitive(p, { simplifier: MeshoptSimplifier, ratio: 0.22, error: 0.0012, lockBorder: false });
+    if (esVela(p) || esBandera(p) || mat.startsWith('Rope') || p.getIndices().getCount() / 3 < min) continue;
+    simplifyPrimitive(p, { simplifier: MeshoptSimplifier, ratio, error, lockBorder: false });
   }
+  console.log('simplificado:', Math.round(contar()), 'triángulos');
 }
 
 // ---- 4) velas y banderas
@@ -213,7 +224,8 @@ for (const m of root.listMeshes()) for (const p of m.listPrimitives()) {
     if (Math.hypot(...media(comp.map((i) => N[i]))) < 0.2) n = [0, 0, 1]; // normales opuestas (doble cara): plano por defecto
     const [eU, eV] = ejesPlano(n);
     const pu = pts.map((q) => dot(q, eU)), pv = pts.map((q) => dot(q, eV));
-    const [u0, u1, v0, v1] = [Math.min(...pu), Math.max(...pu), Math.min(...pv), Math.max(...pv)];
+    const lim = (l) => l.reduce(([a, b], x) => [Math.min(a, x), Math.max(b, x)], [Infinity, -Infinity]);
+    const [[u0, u1], [v0, v1]] = [lim(pu), lim(pv)];
     const su = pu.map((x) => (x - u0) / Math.max(u1 - u0, 1e-6)), sv = pv.map((x) => (x - v0) / Math.max(v1 - v0, 1e-6));
     if (bandera) {
       nBanderas++;
@@ -238,7 +250,7 @@ for (const m of root.listMeshes()) for (const p of m.listPrimitives()) {
       comp.forEach((i, j) => attr.set(dir.map((x) => x * peso[j] * tam), i * 3));
       // w: de dónde a dónde corren las ondas de flameo (0 = borde sujeto, 1 = borde libre).
       // Velas de cuchillo (tela de proa a popa): del grátil (proa) a la baluma (popa). Velas cuadras: de la verga hacia abajo.
-      const xs = pts.map((q) => q[0]), x0 = Math.min(...xs), x1 = Math.max(...xs);
+      const [x0, x1] = lim(pts.map((q) => q[0]));
       const cuchillo = Math.abs(dir[0]) < 0.6 && x1 - x0 > 0.35 * tam;
       comp.forEach((i, j) => {
         const w = cuchillo ? (x1 - P[i][0]) / Math.max(x1 - x0, 1e-6) : 1 - sv[j];
@@ -288,7 +300,7 @@ for (const m of root.listMeshes()) for (const p of m.listPrimitives()) {
     if (comp.length < 4) continue;
     const pts = comp.map((i) => P[i]), c = media(pts), e = ejePrincipal(pts, c);
     const pr = pts.map((q) => dot(q.map((x, k2) => x - c[k2]), e));
-    const t0 = Math.min(...pr), t1 = Math.max(...pr), L = t1 - t0;
+    const t0 = pr.reduce((a, x) => Math.min(a, x), Infinity), t1 = pr.reduce((a, x) => Math.max(a, x), -Infinity), L = t1 - t0;
     let r = 0; pts.forEach((q, j) => { const d = q.map((x, k2) => x - c[k2] - e[k2] * pr[j]); r = Math.max(r, Math.hypot(...d)); });
     if (L < 0.35 || L / Math.max(r, 1e-3) < 18) continue;
     hay = true; nCabos++;
@@ -326,12 +338,17 @@ for (const m of root.listMaterials()) {
 // ---- 6) unir por material, limpiar, texturas, cuantizar y comprimir
 await doc.transform(dedup(), weld(), join({ keepNamed: false }), prune());
 if (C.textura) {
+  // texturas: como mucho C.textura px de lado (sin cambiar la proporción) y, si se pide, el rojo pasa a marrón
   const dirTmp = mkdtempSync(unirRuta(tmpdir(), 'barco-'));
+  const usos = new Map(); // textura -> materiales que la usan
+  for (const m of root.listMaterials()) { const t = m.getBaseColorTexture(); if (t) { if (!usos.has(t)) usos.set(t, []); usos.get(t).push(m.getName()); } }
   for (const t of root.listTextures()) {
-    const ent = unirRuta(dirTmp, 'ent.jpg'), sal = unirRuta(dirTmp, 'sal.jpg');
+    const ent = unirRuta(dirTmp, 'ent.img'), sal = unirRuta(dirTmp, 'sal.jpg');
     writeFileSync(ent, t.getImage());
-    const r = spawnSync('python3', ['-I', '-c', `from PIL import Image; im=Image.open('${ent}'); im.resize((${C.textura},${C.textura}), Image.LANCZOS).save('${sal}', quality=88, optimize=True)`]);
-    if (r.status !== 0) throw new Error('no se pudo reducir la textura: ' + r.stderr);
+    const mats = usos.get(t) || [];
+    const marron = C.marron && mats.some((n) => !C.marron.excepto.includes(n));
+    const r = spawnSync('python3', ['-I', resolve(raiz, 'scripts/textura.py'), ent, sal, String(C.textura), ...(marron ? ['marron'] : [])]);
+    if (r.status !== 0) throw new Error('no se pudo ajustar la textura: ' + r.stderr);
     t.setImage(readFileSync(sal)).setMimeType('image/jpeg');
   }
 }

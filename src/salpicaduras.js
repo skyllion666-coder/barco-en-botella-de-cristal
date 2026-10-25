@@ -1,4 +1,5 @@
-// Salpicaduras: gotas que saltan de las crestas que rompen y de la proa cuando el barco golpea una ola.
+// Salpicaduras: gotas que saltan de las crestas que rompen y de la proa cuando el barco golpea una ola, y agua
+// que cae por la borda cuando una ola grande sacude el barco.
 // El viento las empuja, la gravedad (la de la botella) las hace caer y desaparecen al volver al agua o al
 // tocar el cristal. Solo con mar movido.
 import * as THREE from 'three';
@@ -70,6 +71,14 @@ export function crearSalpicaduras({ escena, agua, botella }) {
         P.copy(f.e1).multiplyScalar(u).addScaledVector(f.e2, v).addScaledVector(f.n, f.d + h);
         if (!dentro(P.x, P.y, P.z, 0.3)) continue;
         lanzar(P, D.set(0, 0, 0), 3 + Math.floor(Math.random() * 5), 1 + fuerte, viento);
+      }
+      // agua que sale por la borda y cae por los costados cuando una ola grande sacude el barco
+      if (barco && barco.golpe > 0.25 && barco.puntoBorda) {
+        const veces = Math.floor(barco.golpe * dt * 90 + Math.random());
+        for (let k = 0; k < veces; k++) {
+          const { p, fuera } = barco.puntoBorda();
+          if (dentro(p.x, p.y, p.z, 0.3)) lanzar(p, D.copy(fuera).multiplyScalar(al(0.3, 0.9)), 2 + Math.floor(Math.random() * 3), 0.12, 0);
+        }
       }
       // proa que golpea una ola: depende de lo rápido que cabecea el barco
       if (barco && Math.abs(barco.vcab) > 0.25 && Math.random() < Math.min(1, Math.abs(barco.vcab) * dt * 18)) {

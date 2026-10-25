@@ -1,3 +1,5 @@
 node_modules/
 dist/
 *.log
+# original del galeón (43 MB): se sube aparte; hace falta para regenerar assets/barco-galeon.glb
+assets/galeone_ii.glb

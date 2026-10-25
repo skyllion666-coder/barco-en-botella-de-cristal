@@ -5,7 +5,7 @@
 import { createRequire } from 'node:module';
 const { chromium } = createRequire(import.meta.url)('/opt/node-tools/node_modules/playwright');
 
-const b = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const b = await chromium.launch({ args: ['--allow-file-access-from-files', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const p = await b.newPage({ viewport: { width: 640, height: 300 }, deviceScaleFactor: 1 });
 const errores = [];
 p.on('pageerror', (e) => errores.push(e.message));

@@ -50,7 +50,7 @@ function puntosExtremos(grupo, N = 160) {
 export function crearFlotacion({ barco, agua, botella }) {
   const f = agua.estado;
   const YAW = barco.info?.rumbo ?? -0.62; // rumbo de reposo respecto al eje de la botella
-  const est = { u: -4, v: 0, cab: 0, bal: 0, vcab: 0, vbal: 0, y: 0, apoyo: 0, escora: 0, escala: 1 };
+  const est = { u: -4, v: 0, cab: 0, bal: 0, vcab: 0, vbal: 0, y: 0, apoyo: 0, escora: 0, escala: 1, golpe: 0 };
   const extremos = puntosExtremos(barco.grupo);
   // medidas del casco (las del barco procedural por defecto): muestreo de olas, margen y huella de espuma
   const I = barco.info || {};
@@ -190,13 +190,20 @@ export function crearFlotacion({ barco, agua, botella }) {
     const muestra = (lx, lz) => agua.alturaEn(u + (lx * cy + lz * sy) * K, v + (lx * sy - lz * cy) * K, t);
     const hb = muestra(LX, 0), hs = muestra(-LX, 0), hp = muestra(0, -LZ), hst = muestra(0, LZ), hc = muestra(0, 0);
     const yObj = (hb + hs + hp + hst + 2 * hc) / 6 - 0.10 * K;
-    const cabObj = Math.atan2(hb - hs, 2 * LX * K) * 0.75;
-    const balObj = Math.atan2(hp - hst, 2 * LZ * K) * 0.65 - 0.075 * Math.min(viento, 1.5); // escora con el viento (y sus rachas)
+    // con olas grandes y empinadas (series, ola grande) el barco cabecea y escora bastante más
+    const pend = Math.max(Math.abs(hb - hs) / (2 * LX * K), Math.abs(hp - hst) / (2 * LZ * K));
+    const fuerte = 1 + 0.7 * clamp((pend - 0.18) / 0.35, 0, 1);
+    const cabObj = Math.atan2(hb - hs, 2 * LX * K) * 0.75 * fuerte;
+    const balObj = Math.atan2(hp - hst, 2 * LZ * K) * 0.65 * fuerte - 0.075 * Math.min(viento, 1.5); // escora con el viento (y sus rachas)
+    // la ola empuja: el barco se desliza un poco por su cara (y luego vuelve a su sitio)
+    u -= clamp((hb - hs) / (2 * LX * K), -0.6, 0.6) * 1.3 * dt * fuerte;
     // resorte-amortiguador para dar inercia al cabeceo y al balanceo
     const w = 4.6, z = 0.55;
     est.vcab += ((cabObj - est.cab) * w * w - 2 * z * w * est.vcab) * dt; est.cab += est.vcab * dt;
     est.vbal += ((balObj - est.bal) * w * w - 2 * z * w * est.vbal) * dt; est.bal += est.vbal * dt;
     est.y += (yObj - est.y) * Math.min(1, dt * 8);
+    // sacudida del casco (0..1): con ella el agua cae por la borda (salpicaduras.js)
+    est.golpe = clamp(Math.max(Math.abs(est.vcab), Math.abs(est.vbal)) * 1.6 + (pend - 0.3), 0, 1);
 
     // apoyo, escora y escala vuelven poco a poco a reposo; después se aparta del cristal si hace falta
     const hacia = (a, b, r) => a + clamp(b - a, -r * dt, r * dt);

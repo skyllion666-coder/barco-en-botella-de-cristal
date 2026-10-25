@@ -102,10 +102,24 @@ Probado en móvil real (GitHub Pages): al pasar de horizontal a vertical el barc
 - Gotas en el cristal: más lentas (≤ 1,1 u/s, a tirones) y estelas más cortas: antes dejaban rayas largas al moverse.
 - Prueba de giro también en tormenta con ola grande (`npm run prueba:giro`): los dos barcos, sin tocar el cristal.
 
+### Ronda 2 (25-10-2026)
+- Galeón: el usuario subió el original `galeone_ii.glb`: «Galeone II», de gogiart, **CC-BY 4.0** (autor y licencia resueltos, ya se puede publicar).
+  Se prepara desde el original (`assets/galeone_ii.glb`, fuera de git por pesar 43 MB): texturas hasta 1024, ~187.000 caras, y el rojo pasado
+  a marrón oscuro de madera (`scripts/textura.py`, sin tocar banderas ni escudos), como pidió el usuario.
+- Los barcos ya no van incrustados: `npm run build` los copia a `docs/barcos/` y la app descarga solo el que se usa (con XMLHttpRequest, que
+  también funciona abriendo la página como archivo; las pruebas lanzan Chromium con `--allow-file-access-from-files`). `docs/index.html` ~0,8 MB.
+- Arcoíris real (`cielo.js`): siete colores por longitud de onda, principal a ~41-42° del antisolar, secundario a ~50-54° invertido y tenue,
+  cielo más claro dentro, banda de Alexander, supernumerarias. Fijo respecto a la luz y a quien mira (no sigue al agua); se mide desde un
+  observador en miniatura junto al cristal con el sol bajo a su espalda, para que el arco quepa entero.
+- El barco reacciona más a las olas grandes (cabecea y escora más, se desliza por la cara de la ola) y cae agua por la borda con los golpes.
+
 ### Sorpresas (no contárselas al usuario hasta que las vea)
 - Bioluminiscencia: de noche el agua agitada, la estela, las burbujas y las salpicaduras brillan en azul verdoso.
 - Estrellas fugaces de noche, cada 6-16 s, dentro de la botella.
 - Arcoíris dentro de la botella al escampar tras lluvia o tormenta (~30 s, solo de día).
+- Campanas de a bordo según la hora real (guardias de 4 h: cada media hora 1-8 toques por parejas), con sonido activado; tocar el barco
+  hace sonar su campana.
+- Botellita con mensaje flotando en el agua (`botellita.js`): la llevan las olas y el viento; al tocarla se abre un pergamino con un dicho marinero.
 
 ## Decisiones tomadas
 - Estilo: lo más realista posible (superar la foto de referencia).

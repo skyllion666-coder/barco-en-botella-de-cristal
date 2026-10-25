@@ -10,7 +10,7 @@ const alto = parseInt(process.argv[4] || '740', 10);
 const query = process.argv[5] || 't=1';
 mkdirSync(dirname(resolve(salida)), { recursive: true });
 
-const b = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-webgl'] });
+const b = await chromium.launch({ args: ['--allow-file-access-from-files', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-webgl'] });
 const p = await b.newPage({ viewport: { width: ancho, height: alto }, deviceScaleFactor: 1 });
 let errores = 0;
 p.on('console', (m) => { const t = m.text(); if (m.type() === 'error' || m.type() === 'warning' || t.startsWith('[app]')) console.log(`[${m.type()}]`, t.slice(0, 1200)); });

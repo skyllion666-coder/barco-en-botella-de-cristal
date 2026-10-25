@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 const { chromium } = createRequire(import.meta.url)('/opt/node-tools/node_modules/playwright');
-const b = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const b = await chromium.launch({ args: ['--allow-file-access-from-files', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const p = await b.newPage({ viewport: { width: 1200, height: 555 } });
 p.on('console', (m) => console.log(`[${m.type()}]`, m.text().slice(0, 900)));
 await p.goto('file:///home/user/repo/docs/index.html?t=2&ui=0&clima=lluvia');

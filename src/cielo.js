@@ -144,34 +144,68 @@ export function crearCielo({ escena, agua, botella, luzRayo }) {
   }
 
   // ---------------------------------------------------------------- arcoíris
-  const R_ARCO = [3.9, 4.75];
-  const geoArco = new THREE.RingGeometry(R_ARCO[0], R_ARCO[1], 120, 1, 0, Math.PI);
+  // Como uno real: no está «en» ningún sitio. Para cada punto del aire de la botella se mira el ángulo entre la
+  // línea de visión y el punto opuesto al sol (antisolar): el arco principal está a ~41-42° (violeta dentro, rojo
+  // fuera), el secundario a ~50-54° con los colores al revés y más tenue; dentro del principal el cielo es más claro
+  // y entre los dos más oscuro (banda de Alexander); justo dentro del violeta, bandas supernumerarias suaves.
+  // Así queda fijo respecto a la luz y a quien mira, no al agua. Solo se ve en el aire, por encima del agua.
+  // A escala de la botella: los ángulos se miden desde un observador en miniatura junto al cristal (con la cámara
+  // real, de ~20° de campo, un arco de 42° no cabría) y el sol está bajo, a su espalda, como cuando escampa por la
+  // tarde: así se ve el arco entero. Se mantiene derecho respecto a la vertical real al inclinar el móvil.
+  const geoArco = new THREE.PlaneGeometry(30, 12);
   const matArco = new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
-    uniforms: { uInt: { value: 0 }, uN: UA.uN, uD: UA.uD, tPerfil: UA.tPerfil, uR: { value: new THREE.Vector2(...R_ARCO) } },
-    vertexShader: 'varying vec3 vW; varying float vR; void main(){ vR = length(position.xy); vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+    uniforms: { uInt: { value: 0 }, uN: UA.uN, uD: UA.uD, tPerfil: UA.tPerfil, uCam: { value: new THREE.Vector3() }, uAnti: { value: new THREE.Vector3(0, 0, -1) } },
+    vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
     fragmentShader: /* glsl */`
-      uniform float uInt; uniform vec3 uN; uniform float uD; uniform sampler2D tPerfil; uniform vec2 uR;
-      varying vec3 vW; varying float vR;
+      uniform float uInt; uniform vec3 uN; uniform float uD; uniform sampler2D tPerfil; uniform vec3 uCam; uniform vec3 uAnti;
+      varying vec3 vW;
       const float X0 = ${BASE_INT_X.toFixed(3)}; const float X1 = ${CORCHO_INT_X.toFixed(3)};
-      vec3 espectro(float x){ // 0 = violeta (dentro), 1 = rojo (fuera)
-        return clamp(vec3(abs(x * 6.0 - 4.2) - 1.0, 2.0 - abs(x * 6.0 - 3.0), 2.0 - abs(x * 6.0 - 1.6)), 0.0, 1.0);
+      // color de una longitud de onda (nm), aproximación clásica, en lineal
+      vec3 onda(float l){
+        vec3 c = vec3(0.0);
+        if (l < 440.0) c = vec3((440.0 - l) / 60.0, 0.0, 1.0);
+        else if (l < 490.0) c = vec3(0.0, (l - 440.0) / 50.0, 1.0);
+        else if (l < 510.0) c = vec3(0.0, 1.0, (510.0 - l) / 20.0);
+        else if (l < 580.0) c = vec3((l - 510.0) / 70.0, 1.0, 0.0);
+        else if (l < 645.0) c = vec3(1.0, (645.0 - l) / 65.0, 0.0);
+        else c = vec3(1.0, 0.0, 0.0);
+        float borde = l < 420.0 ? 0.3 + 0.7 * (l - 380.0) / 40.0 : l > 680.0 ? 0.3 + 0.7 * (720.0 - l) / 40.0 : 1.0;
+        return pow(c * borde, vec3(2.2));
+      }
+      // banda de color entre dos ángulos: a = extremo violeta, b = extremo rojo
+      vec3 banda(float th, float a, float b){
+        float x = (th - a) / (b - a);
+        if (x < -0.15 || x > 1.15) return vec3(0.0);
+        float l = mix(395.0, 705.0, clamp(x, 0.0, 1.0));
+        float env = smoothstep(-0.15, 0.12, x) * smoothstep(1.15, 0.88, x);
+        return onda(l) * env;
       }
       void main(){
         float h = dot(uN, vW) - uD;
         float r = texture2D(tPerfil, vec2((vW.x - X0) / (X1 - X0), 0.5)).r;
-        if (h < 0.05 || vW.x < X0 + 0.2 || vW.x > X1 - 1.0 || length(vW.yz) > r - 0.15) discard;
-        float x = (vR - uR.x) / (uR.y - uR.x);
-        float banda = pow(sin(3.14159 * x), 1.3);
-        // colores de arcoíris de verdad: suaves y algo lavados por la luz del cielo
-        vec3 col = mix(espectro(x), vec3(0.8), 0.28);
-        gl_FragColor = vec4(col * banda * uInt * 0.32 * smoothstep(0.05, 0.9, h), 1.0);
+        if (h < 0.05 || vW.x < X0 + 0.2 || vW.x > X1 - 0.8 || length(vW.yz) > r - 0.12) discard;
+        float th = degrees(acos(clamp(dot(normalize(vW - uCam), uAnti), -1.0, 1.0)));
+        vec3 col = banda(th, 40.6, 42.4) * 1.0                      // principal
+                 + banda(th, 53.7, 50.3) * 0.38;                    // secundario: rojo por dentro
+        // supernumerarias: bandas finas rosa y verde justo dentro del violeta
+        float sup = smoothstep(38.6, 39.6, th) * smoothstep(40.7, 40.1, th);
+        col += vec3(0.30, 0.55, 0.30) * sup * (0.5 + 0.5 * cos((40.6 - th) * 9.0)) * 0.25
+             + vec3(0.55, 0.30, 0.45) * sup * (0.5 - 0.5 * cos((40.6 - th) * 9.0)) * 0.25;
+        // cielo más claro dentro del arco principal
+        col += vec3(0.85, 0.88, 0.92) * 0.07 * smoothstep(25.0, 40.5, th) * step(th, 40.8);
+        // banda de Alexander: algo más oscura entre los dos arcos
+        float alex = smoothstep(42.2, 43.2, th) * smoothstep(50.6, 49.6, th) * 0.10;
+        float a = smoothstep(0.05, 0.9, h) * uInt;
+        col = mix(col, vec3(dot(col, vec3(0.33))), 0.18); // colores suaves, como contra un cielo de verdad
+        gl_FragColor = vec4(col * 0.40 * a, alex * a);
       }`,
   });
   const arco = new THREE.Mesh(geoArco, matArco);
-  arco.frustumCulled = false; arco.visible = false; arco.matrixAutoUpdate = false;
+  arco.position.set(-0.5, 0, -2.2); // un plano al fondo del aire de la botella, de cara a quien mira
+  arco.frustumCulled = false; arco.visible = false;
   escena.add(arco);
-  const zz = new THREE.Vector3(), cen = new THREE.Vector3();
 
   let tAhora = 0;
   function actualizar(t, { rayo, noche, cubierto, altoPx, arcoiris = 0 }) {
@@ -207,14 +241,15 @@ export function crearCielo({ escena, agua, botella, luzRayo }) {
       }
     }
 
-    // arcoíris: un arco sobre el agua, al fondo de la botella, orientado hacia quien mira
+    // arcoíris: depende solo de la posición de quien mira y del sol (antisolar = opuesto al sol)
     arco.visible = arcoiris > 0.01;
     if (arco.visible) {
       matArco.uniforms.uInt.value = arcoiris;
-      cen.copy(f.e1).multiplyScalar(2.0).addScaledVector(f.n, f.d); // algo a la derecha del barco
-      cen.z -= 1.6; // hacia el fondo
-      zz.crossVectors(f.e1, f.n).normalize();
-      arco.matrix.makeBasis(f.e1, f.n, zz).setPosition(cen);
+      const ojo = matArco.uniforms.uCam.value.set(0.5, 0.5, 6.0); // observador en miniatura, delante de la botella
+      // antisolar: hacia el fondo de la botella, a ~12° bajo el horizonte (el sol, bajo y a la espalda)
+      const A = matArco.uniforms.uAnti.value, n = f.n;
+      A.set(0.5, 0, -2.2).sub(ojo);
+      A.addScaledVector(n, -A.dot(n)).normalize().multiplyScalar(Math.cos(0.21)).addScaledVector(n, -Math.sin(0.21));
     }
   }
 

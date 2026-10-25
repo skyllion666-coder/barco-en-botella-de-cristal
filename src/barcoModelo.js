@@ -109,7 +109,7 @@ export async function crearBarcoModelo(datos) {
 
   const info = {
     eslora: c.max[0] - c.min[0], manga: c.max[2] - c.min[2], alturaMax: t.max[1], calado: -c.min[1],
-    proa: t.max[0], popa: t.min[0], rumbo: extras.rumbo,
+    proa: t.max[0], popa: t.min[0], rumbo: extras.rumbo, cubierta: c.max[1],
   };
   return {
     grupo, info, modelo: true, credito: extras.credito || '',
