@@ -1,0 +1,14 @@
+import { createRequire } from 'node:module';
+const { chromium } = createRequire(import.meta.url)('/opt/node-tools/node_modules/playwright');
+const b = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const p = await b.newPage({ viewport: { width: 900, height: 420 } });
+const errores = [];
+p.on('pageerror', (e) => errores.push(e.message));
+await p.goto('file:///home/user/repo/docs/index.html?dpr=0.6');
+await p.waitForFunction('window.__listo === true', null, { timeout: 120000 });
+await p.waitForTimeout(2500);
+await p.evaluate(() => document.querySelector('#engranaje').click());
+await p.waitForTimeout(1500);
+await p.screenshot({ path: process.argv[2], timeout: 120000 });
+console.log('errores:', errores.length ? errores : 'ninguno');
+await b.close();

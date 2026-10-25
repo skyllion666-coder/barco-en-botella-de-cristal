@@ -1,0 +1,10 @@
+import { createRequire } from 'node:module';
+const { chromium } = createRequire(import.meta.url)('/opt/node-tools/node_modules/playwright');
+const b = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const p = await b.newPage({ viewport: { width: 800, height: 370 } });
+p.on('console', (m) => console.log(`[${m.type()}]`, m.text().slice(0, 600)));
+p.on('pageerror', (e) => console.log('ERROR', e.message));
+await p.goto('file:///home/user/repo/docs/index.html?' + (process.argv[2] || 't=2&ui=0&clima=lluvia'));
+await p.waitForFunction('window.__listo === true', null, { timeout: 120000 });
+console.log(JSON.stringify(await p.evaluate(process.argv[3] || `(() => { const c = __api.clima; const m = c.prec.lluvia; return { vis: m.visible, cant: m.material.uniforms.uCantidad.value, inst: m.geometry.instanceCount, lluvia: c.p.lluvia, alt: !!m.material.uniforms.tAltura.value, n: m.material.uniforms.uN.value.toArray(), d: m.material.uniforms.uD.value, tiempo: m.material.uniforms.uTiempo.value, col: m.material.uniforms.uColor.value.toArray() }; })()`)));
+await b.close();
