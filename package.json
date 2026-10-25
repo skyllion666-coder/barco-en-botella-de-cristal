@@ -8,7 +8,7 @@
     "build": "node scripts/build.mjs",
     "dev": "node scripts/build.mjs --serve",
     "shot": "node scripts/shot.mjs",
-    "prueba:giro": "node scripts/prueba_giro.mjs galeon && node scripts/prueba_giro.mjs ottoman && node scripts/prueba_giro.mjs galeon tormenta",
+    "prueba:giro": "node scripts/prueba_giro.mjs && node scripts/prueba_giro.mjs galeon tormenta",
     "prueba:olas": "node scripts/prueba_olas.mjs",
     "prueba:trueno": "node scripts/prueba_trueno.mjs"
   },

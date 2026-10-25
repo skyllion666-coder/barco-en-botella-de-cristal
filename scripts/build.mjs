@@ -1,5 +1,5 @@
-// Empaqueta src/main.js en docs/index.html (JS inline y minificado) y copia los barcos a docs/barcos/
-// (la app descarga solo el que se usa).
+// Empaqueta src/main.js en docs/index.html (JS inline y minificado) y copia el barco (galeón) a docs/barcos/
+// (la app lo descarga al abrirse).
 import { build } from 'esbuild';
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -31,7 +31,7 @@ writeFileSync(resolve(raiz, 'docs/index.html'), html);
 console.log(`docs/index.html: ${(html.length / 1024).toFixed(0)} KB (versión ${VERSION})`);
 writeFileSync(resolve(raiz, 'docs/version.json'), JSON.stringify({ version: VERSION }) + '\n');
 mkdirSync(resolve(raiz, 'docs/barcos'), { recursive: true });
-for (const id of ['galeon', 'ottoman']) {
+for (const id of ['galeon']) {
   const destino = resolve(raiz, `docs/barcos/${id}.glb`);
   copyFileSync(resolve(raiz, `assets/barco-${id}.glb`), destino);
   console.log(`docs/barcos/${id}.glb: ${(statSync(destino).size / 1024).toFixed(0)} KB`);
@@ -44,9 +44,9 @@ if (idx > 0) {
   const plantillaA = readFileSync(resolve(raiz, 'src/artefacto.template.html'), 'utf8');
   writeFileSync(salida, plantillaA.replace('/*__APP__*/', () => js));
   console.log(`artefacto: ${salida}`);
-  // el visor de claude.ai no sirve .glb: los barcos van al lado como texto base64
+  // el visor de claude.ai no sirve .glb: el barco va al lado como texto base64
   const dirB = resolve(dirname(salida), 'barcos');
   mkdirSync(dirB, { recursive: true });
-  for (const id of ['galeon', 'ottoman']) writeFileSync(resolve(dirB, `${id}.glb.b64.txt`), readFileSync(resolve(raiz, `assets/barco-${id}.glb`)).toString('base64'));
+  for (const id of ['galeon']) writeFileSync(resolve(dirB, `${id}.glb.b64.txt`), readFileSync(resolve(raiz, `assets/barco-${id}.glb`)).toString('base64'));
   console.log(`barcos en texto: ${dirB}`);
 }

@@ -9,7 +9,7 @@
 //      _SIGUE:  en los cabos enganchados a una vela, cuánto siguen su movimiento y en qué punto de ella (w);
 //  - une las piezas por material (menos llamadas de dibujo), ajusta texturas y comprime con meshopt;
 //  - guarda en extras la huella del casco en la flotación, la posición de los farolillos, el rumbo y el crédito.
-// Uso: node scripts/preparar_barco.mjs [galeon|ottoman]   (por defecto, galeon) -> assets/barco-<modelo>.glb
+// Uso: node scripts/preparar_barco.mjs [galeon]   (por defecto, galeon) -> assets/barco-<modelo>.glb
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS, EXTMeshoptCompression } from '@gltf-transform/extensions';
 import { dedup, prune, weld, join, quantize, reorder, simplifyPrimitive, transformMesh, getBounds } from '@gltf-transform/functions';
@@ -44,22 +44,6 @@ const MODELOS = {
     rumbo: -0.30,
     credito: '«Galeone II», de gogiart (Sketchfab), licencia CC-BY 4.0. Modificado.',
     colores: {},
-  },
-  // Velero mercante otomano de dos palos, de polygora (Sketchfab, CC-BY).
-  ottoman: {
-    entrada: 'assets/barco-original.glb', salida: 'assets/barco-ottoman.glb',
-    lineaAgua: 0.03, alturaFinal: 7.0,
-    velas: ['Sail'], banderas: [], asta: 'proa', radioCabo: 0.035,
-    simplificar: { ratio: 0.22, error: 0.0012, min: 1500 }, textura: 1024,
-    rumbo: -0.30,
-    credito: '«Ottoman Coastal Trade Tall Ship», de polygora (Sketchfab), licencia CC-BY. Modificado.',
-    colores: {
-      Sail: { color: [0.80, 0.76, 0.67, 1] },                                  // lona, no blanco puro
-      Wood: { color: [0.84, 0.78, 0.70, 1] },                                  // pintura algo menos saturada
-      Metal: { metal: 0.75, rugosidad: 0.45 },
-      Material: { color: [0.72, 0.54, 0.16, 1], metal: 0.7, rugosidad: 0.38 }, // pan de oro
-      'Material.002': { color: [0.72, 0.54, 0.16, 1], metal: 0.7, rugosidad: 0.38 },
-    },
   },
 };
 const nombre = process.argv[2] || 'galeon';

@@ -6,7 +6,6 @@ import { crearBotella } from './bottle.js';
 import { crearVidrio } from './vidrio.js';
 import { crearAgua } from './agua.js';
 import { texRuido } from './texturas.js';
-import { crearBarco } from './barco.js';
 import { crearBarcoModelo } from './barcoModelo.js';
 import { crearFlotacion } from './flotacion.js';
 import { crearSensores } from './sensores.js';
@@ -31,11 +30,8 @@ const { cubo, pmrem } = crearCubemapEntorno(canal.renderer, 512);
 const botella = crearBotella();
 const mundo = crearMundo({ pmrem });
 const ruido = texRuido(256);
-// Barcos disponibles: archivos aparte (docs/barcos/) que se descargan solo al usarlos. Se cambian desde Ajustes
-// (se recuerda la elección); ?barco=galeon|ottoman|procedural fuerza uno (procedural = el generado por código,
-// que también se usa si un modelo no se pudiera descargar).
-const BARCOS = { galeon: { nombre: 'Galeón', url: 'barcos/galeon.glb' }, ottoman: { nombre: 'Otomano', url: 'barcos/ottoman.glb' } };
-const cacheBarcos = {};
+// El barco (el galeón) va en un archivo aparte, docs/barcos/galeon.glb, que se descarga al abrir la app.
+const URL_BARCO = 'barcos/galeon.glb';
 
 // Versión (archivo VERSION, la pone build.mjs). Al abrir la app y al volver a ella, se mira docs/version.json sin
 // caché: si hay una versión más nueva publicada, la página se recarga sola con ?v=<nueva> (una vez por versión,
@@ -55,11 +51,11 @@ function comprobarVersion() {
 comprobarVersion();
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') comprobarVersion(); });
 // XMLHttpRequest y no fetch: así también funciona abriendo la página como archivo local.
-// En la versión para enlace de claude.ai (window.__barcosTexto) los barcos van como texto base64 (.b64.txt).
+// En la versión para enlace de claude.ai (window.__barcosTexto) el barco va como texto base64 (.b64.txt).
 const descargar = (url) => new Promise((ok, mal) => {
   const texto = !!window.__barcosTexto;
   const x = new XMLHttpRequest();
-  // ?v=: cada versión pide sus barcos de nuevo (no los de la caché de una versión anterior)
+  // ?v=: cada versión pide su barco de nuevo (no el de la caché de una versión anterior)
   x.open('GET', (texto ? url + '.b64.txt' : url) + '?v=' + VERSION); x.responseType = texto ? 'text' : 'arraybuffer';
   const datos = () => (texto ? Uint8Array.from(atob(x.response.trim()), (c) => c.charCodeAt(0)) : new Uint8Array(x.response));
   x.onload = () => (x.status === 200 || (x.status === 0 && x.response) ? ok(datos()) : mal(new Error('HTTP ' + x.status)));
@@ -67,20 +63,17 @@ const descargar = (url) => new Promise((ok, mal) => {
   x.send();
 });
 const aviso = document.getElementById('cargando');
-async function cargarBarco(id) {
-  if (cacheBarcos[id]) return cacheBarcos[id];
-  let b;
-  if (!BARCOS[id]) b = crearBarco();
-  else {
-    if (aviso) aviso.style.opacity = '1';
-    try { b = await crearBarcoModelo(await descargar(BARCOS[id].url)); } catch (e) { console.warn('[app] modelo del barco no disponible:', e); b = crearBarco(); }
-    if (aviso) aviso.style.opacity = '0';
+// Si la descarga falla (mala cobertura), se reintenta con esperas crecientes y se avisa en pantalla.
+async function cargarBarco() {
+  for (let intento = 1; ; intento++) {
+    try { return await crearBarcoModelo(await descargar(URL_BARCO)); } catch (e) {
+      console.warn('[app] no se pudo descargar el barco:', e);
+      if (aviso) { aviso.textContent = 'Sin conexión: reintentando descargar el barco…'; aviso.style.opacity = '1'; }
+      await new Promise((r) => setTimeout(r, Math.min(15, 2 * intento) * 1000));
+    }
   }
-  return (cacheBarcos[id] = b);
 }
-const barcoGuardado = (() => { try { return JSON.parse(localStorage.getItem('barco-botella-v2') || '{}').barco; } catch (_) { return null; } })();
-let idBarco = params.get('barco') || (BARCOS[barcoGuardado] ? barcoGuardado : 'galeon');
-let barco = await cargarBarco(idBarco);
+const barco = await cargarBarco();
 if (aviso) aviso.style.opacity = '0';
 mundo.interior.escena.add(barco.grupo); // el barco vive dentro de la botella, con la luz del clima
 
@@ -92,7 +85,7 @@ const U = {
 };
 const vidrio = crearVidrio(U, botella.exterior);
 const agua = crearAgua({ renderer: canal.renderer, botella, texRuido: ruido, cubo, relleno: num('relleno', 0.30) });
-let flotacion = crearFlotacion({ barco, agua, botella });
+const flotacion = crearFlotacion({ barco, agua, botella });
 const gotas = crearGotas({ renderer: canal.renderer, agua, botella });
 const viento = crearViento();
 const salpicaduras = crearSalpicaduras({ escena: mundo.interior.escena, agua, botella });
@@ -107,7 +100,7 @@ function puntoBorda() {
   bordaD.set(0, -0.2, lado).transformDirection(barco.grupo.matrix);
   return { p: bordaP, fuera: bordaD };
 }
-let reflejo = crearReflejo({ interior: mundo.interior, barco, renderer: canal.renderer });
+const reflejo = crearReflejo({ interior: mundo.interior, barco, renderer: canal.renderer });
 
 const camara = new THREE.PerspectiveCamera(20, 2, 5, 220);
 const OBJETIVO = new THREE.Vector3(0.9, -1.2, 0);
@@ -165,24 +158,7 @@ clima.conectarViento(viento);
 if (modoCaptura) clima.saltar();
 // ?ola=1: en la captura, una ola grande cruzando el centro de la botella
 
-// Cambia de barco al momento: se monta en la botella y se rehacen su flotación y su reflejo.
 let ui = null;
-async function cambiarBarco(id) {
-  if (id === idBarco || !BARCOS[id]) return;
-  const nuevo = await cargarBarco(id);
-  mundo.interior.escena.remove(barco.grupo);
-  barco = nuevo; idBarco = id;
-  mundo.interior.escena.add(barco.grupo);
-  flotacion = crearFlotacion({ barco, agua, botella });
-  reflejo = crearReflejo({ interior: mundo.interior, barco, renderer: canal.renderer });
-  clima.ponerBarco(barco);
-  ui?.ponerCredito(barco.credito);
-}
-const barcos = {
-  lista: Object.entries(BARCOS).map(([id, b]) => ({ id, nombre: b.nombre })),
-  get actual() { return idBarco; },
-  cambiar: cambiarBarco,
-};
 
 // Tocar la botellita que flota: se abre su mensaje. Tocar el barco: suena su campana.
 const rayoToque = new THREE.Raycaster(), ndcToque = new THREE.Vector2();
@@ -221,7 +197,7 @@ if (params.get('ui') !== '0') {
     clima, sensores, audio,
     alAjustarCalidad: () => { calidad.modo = MODOS[(MODOS.indexOf(calidad.modo) + 1) % MODOS.length]; redimensionar(); },
     estadoCalidad: () => calidad.modo,
-    opciones, barcos, version: VERSION, creditoBarco: barco.credito, rendimiento: () => ({ fps: rend.fps, resolucion: Math.round(dprActual() / dprDisp * 100) }),
+    opciones, version: VERSION, creditoBarco: barco.credito, rendimiento: () => ({ fps: rend.fps, resolucion: Math.round(dprActual() / dprDisp * 100) }),
   });
 }
 
@@ -327,6 +303,6 @@ if (modoCaptura) {
   window.__listo = true;
 }
 window.__api = {
-  clima, sensores, agua, calidad, redibujar: (dt) => dibujar(tTotal, dt), camara, canal, avanzar, botella, audio, gotas, cambiarBarco, viento, salpicaduras, botellita, gaviotas,
-  get flotacion() { return flotacion; }, get barco() { return barco; },
+  clima, sensores, agua, calidad, redibujar: (dt) => dibujar(tTotal, dt), camara, canal, avanzar, botella, audio, gotas, viento, salpicaduras, botellita, gaviotas,
+  flotacion, barco,
 };

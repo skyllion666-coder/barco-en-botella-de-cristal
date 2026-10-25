@@ -48,7 +48,7 @@ function el(tag, attrs = {}, hijos = []) {
   return e;
 }
 
-export function crearUI({ clima, sensores, audio, alAjustarCalidad, estadoCalidad, opciones = {}, rendimiento, barcos, version, creditoBarco = '' }) {
+export function crearUI({ clima, sensores, audio, alAjustarCalidad, estadoCalidad, opciones = {}, rendimiento, version, creditoBarco = '' }) {
   const estilo = el('style'); estilo.textContent = CSS; document.head.append(estilo);
   const raiz = el('div', { id: 'ui' });
   document.body.append(raiz);
@@ -90,13 +90,6 @@ export function crearUI({ clima, sensores, audio, alAjustarCalidad, estadoCalida
   const ponerCredito = (t) => { credito.textContent = t ? 'Barco: ' + t : ''; credito.style.display = t ? '' : 'none'; };
   ponerCredito(creditoBarco);
   const notaVersion = el('div', { class: 'nota', texto: version ? `Versión ${version}` : '' });
-  // selector de barco: pasa al siguiente de la lista
-  const bBarco = el('button', { class: 'btn', type: 'button', texto: 'Barco', onclick: async () => {
-    if (!barcos) return;
-    const i = barcos.lista.findIndex((b) => b.id === barcos.actual);
-    await barcos.cambiar(barcos.lista[(i + 1) % barcos.lista.length].id);
-    sincronizar(); guardar();
-  } });
   const panel = el('div', { id: 'panel', class: 'ui-vidrio' }, [
     estadoRend,
     el('div', {}, [el('label', {}, [el('span', { texto: 'Mar' }), el('span', { texto: 'calma ↔ tempestad' })]), sMar]),
@@ -104,7 +97,7 @@ export function crearUI({ clima, sensores, audio, alAjustarCalidad, estadoCalida
     el('div', { class: 'fila' }, [bNivelar, bSensores]),
     el('div', { class: 'fila' }, [bSonido, bPantalla]),
     el('div', { class: 'fila' }, [bCalidad, bHora]),
-    el('div', { class: 'fila' }, [bBarco, bVibrar]),
+    el('div', { class: 'fila' }, [bVibrar]),
     estadoSensor, nota, notaSensor, credito, notaVersion,
   ]);
   const engranaje = el('button', { id: 'engranaje', class: 'ui-vidrio', type: 'button', 'aria-label': 'Ajustes', texto: '⚙️', onclick: () => { panel.classList.toggle('abierto'); recordar(); } });
@@ -152,8 +145,6 @@ export function crearUI({ clima, sensores, audio, alAjustarCalidad, estadoCalida
     bSensores.textContent = sensores.permiso === 'denegado' ? 'Permiso denegado' : 'Activar sensores';
     if (audio) { bSonido.textContent = 'Sonido: ' + (audio.activo ? 'sí' : 'no'); bSonido.classList.toggle('on', audio.activo); sonido.textContent = audio.activo ? '🔊' : '🔇'; }
     if (estadoCalidad) bCalidad.textContent = 'Calidad: ' + estadoCalidad();
-    if (barcos) bBarco.textContent = 'Barco: ' + (barcos.lista.find((b) => b.id === barcos.actual)?.nombre || '—');
-    bBarco.style.display = barcos ? '' : 'none';
     bVibrar.textContent = 'Vibración: ' + (opciones.vibrar ? 'sí' : 'no'); bVibrar.classList.toggle('on', !!opciones.vibrar);
     bVibrar.style.display = navigator.vibrate ? '' : 'none';
     bHora.textContent = 'Hora real: ' + (clima.horaReal ? 'sí' : 'no'); bHora.classList.toggle('on', clima.horaReal);
@@ -167,7 +158,7 @@ export function crearUI({ clima, sensores, audio, alAjustarCalidad, estadoCalida
   // --- persistencia sencilla
   function guardar() {
     try {
-      localStorage.setItem('barco-botella-v2', JSON.stringify({ clima: clima.nombre, manual, mar: clima.o.mar, viento: clima.o.viento, vibrar: opciones.vibrar, horaReal: clima.horaReal, barco: barcos?.actual }));
+      localStorage.setItem('barco-botella-v2', JSON.stringify({ clima: clima.nombre, manual, mar: clima.o.mar, viento: clima.o.viento, vibrar: opciones.vibrar, horaReal: clima.horaReal }));
     } catch (_) { /* sin almacenamiento */ }
   }
   function restaurar() {

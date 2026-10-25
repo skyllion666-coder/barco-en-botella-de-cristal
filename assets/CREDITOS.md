@@ -1,8 +1,8 @@
 # Créditos de los modelos de barco
 
-La app trae los dos barcos y se eligen en Ajustes → «Barco». El galeón es el de por defecto. Cada uno se genera con `node scripts/preparar_barco.mjs galeon|ottoman`.
+La app trae un solo barco, el galeón. Se genera con `node scripts/preparar_barco.mjs`.
 
-## Galeón — por defecto
+## Galeón
 - **Modelo:** «Galeone II», por **gogiart** (https://sketchfab.com/agt14032013).
 - **Fuente:** https://sketchfab.com/3d-models/galeone-ii-25ea58f02dab42db8abb02b15a8e35f7
 - **Licencia:** CC-BY 4.0 (http://creativecommons.org/licenses/by/4.0/). Hay que citar al autor (se cita en la app, en Ajustes, y en el README).
@@ -15,19 +15,4 @@ La app trae los dos barcos y se eligen en Ajustes → «Barco». El galeón es e
   dibujadas aquí (rojigualda y cruz de Borgoña, `scripts/bandera.py`) y agrandadas; velas y banderas subdivididas con atributos de
   animación (hinchado, colgar, ondeo); cabos detectados para moverlos con el viento; piezas unidas por material; meshopt.
 
-## Ottoman (el otro barco)
-
-- **Modelo:** «Ottoman Coastal Trade Tall Ship 3D Model», por **polygora**.
-- **Fuente:** https://sketchfab.com/3d-models/ottoman-coastal-trade-tall-ship-3d-model-1bf970d4795e46f8803a23b6fe276d00
-- **Licencia:** CC Attribution (CC-BY). Hay que citar al autor (se cita en la app, en Ajustes, y en el README).
-- `barco-original.glb`: archivo descargado, 178.424 caras.
-- `barco-ottoman.glb`: `node scripts/preparar_barco.mjs ottoman` (68.643 caras, 9 mallas, ~710 KB).
-
-### Cambios respecto al original
-- Colocado en el marco de la app (proa hacia +X, flotación en y = 0) y escalado.
-- Simplificadas con error acotado solo las piezas pesadas (casco, motones, esferas de metal, tallas); velas, cabos y obenques intactos.
-- Velas subdivididas y con un atributo de hinchado para animarlas con el viento.
-- Piezas unidas por material, textura reducida a 1024 px y geometría comprimida (meshopt).
-- Colores: lona en lugar de blanco puro, pintura del casco algo menos saturada, molduras doradas metálicas, metal con brillo.
-
-La versión `barco-ligero.glb` que se hizo con Blender (Decimate al 20 %) no se usa: deformaba las velas y perdía cabos y obenques.
+El otro barco que hubo (el otomano de polygora) se quitó a petición del usuario.

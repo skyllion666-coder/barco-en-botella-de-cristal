@@ -139,6 +139,11 @@ Probado en móvil real (GitHub Pages): al pasar de horizontal a vertical el barc
   subir o bajar, aleteo con bajada rápida y planeos en «M», cabeceo y alabeo, cernido cara al viento, a veces una persigue a la otra;
   toma de tierra frenando para posarse. Prueba (simulación de 150 s con giros y lluvia): nunca tocan el cristal, sin saltos.
 
+### Un solo barco (25-10-2026, versión 14)
+- El usuario se queda con el galeón: se quitan el otomano (modelo, original y selector «Barco» de Ajustes) y el barco procedural
+  (`barco.js`). Si la descarga del galeón falla, la app avisa y reintenta (2, 4, 6… s). Lo de las secciones anteriores sobre el otomano
+  y el cambio de barco es historia.
+
 ### Sorpresas (no contárselas al usuario hasta que las vea)
 - Bioluminiscencia: de noche el agua agitada, la estela, las burbujas y las salpicaduras brillan en azul verdoso.
 - Estrellas fugaces de noche, cada 6-16 s, dentro de la botella.
