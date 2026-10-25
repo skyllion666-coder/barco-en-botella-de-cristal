@@ -6,20 +6,40 @@ import * as THREE from 'three';
 
 const VERT = /* glsl */`
   attribute float pared;
-  varying vec3 vN; varying vec3 vP; varying vec3 vL; varying float vPared; varying vec3 vRad;
+  varying vec3 vN; varying vec3 vP; varying vec3 vL; varying float vPared; varying vec3 vRad; varying vec3 vEje; varying vec3 vTan;
   void main(){
     vL = position; vPared = pared;
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     vP = mv.xyz;
     vN = normalize(normalMatrix * normal);
     vRad = normalMatrix * vec3(0.0, position.y, position.z);
+    vEje = normalMatrix * vec3(1.0, 0.0, 0.0);
+    vTan = normalMatrix * vec3(0.0, -position.z, position.y);
     gl_Position = projectionMatrix * mv;
   }`;
 
+// Vidrio soplado: ondulaciones suaves e irregulares de la superficie (anillos de soplado a lo largo del eje y
+// vetas a lo largo del contorno). Rompen los reflejos rectos y deforman un poco lo que se ve a través.
+const GLSL_SOPLADO = /* glsl */`
+  vec3 soplado(vec3 N, vec3 L, vec3 eje, vec3 tang){
+    float a = atan(L.z, L.y);
+    float x = L.x;
+    // frecuencias no armónicas y fase que deriva con el ángulo: sin periodo visible
+    float anillos = sin(x * 1.37 + sin(a * 2.0 + x * 0.41) * 1.8 + sin(x * 0.23) * 2.5) * 0.45
+                  + sin(x * 3.11 + a * 1.0 + sin(x * 0.67 + a) * 1.2 + 2.1) * 0.30
+                  + sin(x * 6.53 - a * 3.0 + 0.4) * 0.07;
+    float vetas = sin(a * 5.0 + x * 0.9 + sin(x * 0.5) * 2.0) * 0.5 + sin(a * 11.0 - x * 1.7 + sin(x * 0.31) * 3.0 + 0.7) * 0.2;
+    // el cuello y el labio, más trabajados a mano, ondulan más
+    float k = mix(0.045, 0.085, smoothstep(9.0, 13.5, x));
+    vec3 t = normalize(tang + vec3(1e-5));
+    return normalize(N + normalize(eje) * anillos * k + t * vetas * k * 0.7);
+  }`;
+
 const FRAG_ATRAS = /* glsl */`
-  varying vec3 vN; varying vec3 vP; varying float vPared;
+  varying vec3 vN; varying vec3 vP; varying vec3 vL; varying float vPared; varying vec3 vEje; varying vec3 vTan;
+  ${GLSL_SOPLADO}
   void main(){
-    vec3 n = normalize(vN);
+    vec3 n = soplado(normalize(vN), vL, vEje, vTan);
     gl_FragColor = vec4(n.xy, length(vP), vPared);
   }`;
 
@@ -27,7 +47,8 @@ const FRAG_FRENTE = /* glsl */`
   uniform sampler2D tEscena; uniform sampler2D tAtras; uniform samplerCube tEntorno;
   uniform vec2 uRes; uniform mat3 uEntornoRot; uniform vec2 uProy;
   uniform float uTiempo; uniform vec3 uLuzExt; uniform float uDbg;
-  varying vec3 vN; varying vec3 vP; varying vec3 vL; varying float vPared; varying vec3 vRad;
+  varying vec3 vN; varying vec3 vP; varying vec3 vL; varying float vPared; varying vec3 vRad; varying vec3 vEje; varying vec3 vTan;
+  ${GLSL_SOPLADO}
 
   vec3 envMuestra(vec3 dView, float lod){
     vec3 dw = transpose(mat3(viewMatrix)) * dView;
@@ -36,7 +57,7 @@ const FRAG_FRENTE = /* glsl */`
   float schlick(float f0, float c){ float x = 1.0 - c; float x2 = x*x; return f0 + (1.0 - f0) * x2*x2*x; }
 
   void main(){
-    vec3 N = normalize(vN);
+    vec3 N = soplado(normalize(vN), vL, vEje, vTan);
     vec3 I = normalize(vP);
 
     // Anillos concéntricos del fondo grueso de la base

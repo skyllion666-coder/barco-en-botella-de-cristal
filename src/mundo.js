@@ -1,6 +1,5 @@
 // Mundo exterior a la botella: fondo desenfocado, mesa de madera, soporte de caoba y corcho.
 import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { texMadera, texCorcho } from './texturas.js';
 import { CORCHO_INT_X, BOCA_X, R_CUERPO } from './bottle.js';
 
@@ -21,14 +20,26 @@ function fondo() {
         // resplandor de la ventana arriba a la izquierda
         float g = exp(-pow(length((p - vec2(-0.55, 0.55)) * vec2(0.8, 1.2)) * 1.5, 2.0));
         base += vec3(0.45, 0.36, 0.27) * g * 0.7;
-        // luces desenfocadas (bokeh)
-        for (int i = 0; i < 14; i++){
+        // habitación desenfocada (profundidad de campo): estantería con lomos de libros, marco de la ventana
+        // y canto de un mueble lejano; todo a baja frecuencia, como visto muy fuera de foco
+        float estante = smoothstep(0.10, 0.02, abs(p.y - 0.12)) * smoothstep(0.95, 0.15, p.x) * smoothstep(-0.95, -0.25, p.x);
+        float lomos = 0.5 + 0.5 * sin(p.x * 23.0 + sin(p.x * 7.0) * 1.5) * sin(p.x * 9.0 + 1.3);
+        base = mix(base, base * (0.55 + 0.35 * lomos) + vec3(0.03, 0.018, 0.01) * lomos, estante * 0.8);
+        float balda = exp(-pow((p.y - 0.235) / 0.022, 2.0)) * smoothstep(0.95, 0.2, p.x) * smoothstep(-0.95, -0.3, p.x);
+        base += vec3(0.06, 0.045, 0.03) * balda;
+        float marco = exp(-pow((p.x + 0.18) / 0.03, 2.0)) * smoothstep(0.15, 0.4, p.y);
+        base *= 1.0 - 0.35 * marco;
+        float mueble = smoothstep(-0.20, -0.30, p.y) * smoothstep(0.98, 0.5, p.x);
+        base = mix(base, base * 0.6, mueble);
+        // luces desenfocadas (bokeh): discos de bordes suaves con el anillo algo más brillante, tamaños y tonos variados
+        for (int i = 0; i < 22; i++){
           float fi = float(i);
           vec2 c = vec2(h21(vec2(fi, 1.7)) * 2.0 - 1.0, h21(vec2(fi, 8.3)) * 0.9 - 0.15);
-          float r = 0.035 + 0.05 * h21(vec2(fi, 3.1));
-          float d = length((p - c) * vec2(1., 1.));
-          float disco = smoothstep(r, r * 0.55, d);
-          base += vec3(1.0, 0.75, 0.5) * disco * (0.025 + 0.05 * h21(vec2(fi, 5.5)));
+          float r = 0.03 + 0.08 * h21(vec2(fi, 3.1)) * h21(vec2(fi, 4.4));
+          float d = length(p - c);
+          float disco = smoothstep(r, r * 0.7, d) * (0.75 + 0.25 * smoothstep(r * 0.4, r * 0.95, d));
+          vec3 tono = mix(vec3(1.0, 0.72, 0.45), vec3(0.75, 0.82, 1.0), step(0.78, h21(vec2(fi, 9.9))));
+          base += tono * disco * (0.02 + 0.055 * h21(vec2(fi, 5.5)));
         }
         base *= uBrillo * uTinte;
         // estrellas y luna de noche
@@ -80,18 +91,45 @@ function geoCorcho() {
   return g;
 }
 
+// Cuna: pieza con el hueco circular donde descansa la botella, cantos superiores redondeados y una muesca
+// decorativa a cada lado, cerca del pie.
 function geoCuna() {
-  const half = 3.7, rad = R_CUERPO + 0.02, base = -7.25;
+  const half = 3.7, rad = R_CUERPO + 0.02, base = -7.25, f = 0.32;
   const y = (z) => -Math.sqrt(rad * rad - z * z);
   const s = new THREE.Shape();
+  const lado = (sg) => {
+    // sube por un costado con la muesca (sg = +1 derecha, -1 izquierda)
+    const pts = [[half, base + 0.42], [half - 0.14, base + 0.50], [half - 0.14, base + 0.74], [half, base + 0.82], [half, y(half) - f]];
+    return sg > 0 ? pts : pts.reverse();
+  };
   s.moveTo(-half, base);
   s.lineTo(half, base);
+  for (const [z, yy] of lado(1)) s.lineTo(z, yy);
+  s.quadraticCurveTo(half, y(half), half - f, y(half - f));
   const N = 36;
-  for (let i = 0; i <= N; i++) { const z = half - (2 * half * i) / N; s.lineTo(z, y(z)); }
+  for (let i = 0; i <= N; i++) { const z = (half - f) - (2 * (half - f) * i) / N; s.lineTo(z, y(z)); }
+  s.quadraticCurveTo(-half, y(half), -half, y(half) - f);
+  for (const [z, yy] of lado(-1)) s.lineTo(-z, yy);
   s.lineTo(-half, base);
   const g = new THREE.ExtrudeGeometry(s, { depth: 1.05, bevelEnabled: true, bevelSize: 0.07, bevelThickness: 0.07, bevelSegments: 3, curveSegments: 8 });
   g.rotateY(Math.PI / 2);
   g.translate(-0.525, 0, 0);
+  return g;
+}
+
+// Peana moldurada: zócalo recto, pequeño escalón y canto redondeado hasta la cara superior.
+function geoPeana(largo) {
+  const W = 2.8, H = 0.72;
+  const s = new THREE.Shape();
+  s.moveTo(-W, 0); s.lineTo(W, 0); s.lineTo(W, 0.2);
+  s.lineTo(W - 0.12, 0.26);
+  s.quadraticCurveTo(W - 0.12, H - 0.04, W - 0.52, H);
+  s.lineTo(-(W - 0.52), H);
+  s.quadraticCurveTo(-(W - 0.12), H - 0.04, -(W - 0.12), 0.26);
+  s.lineTo(-W, 0.2); s.lineTo(-W, 0);
+  const g = new THREE.ExtrudeGeometry(s, { depth: largo, bevelEnabled: true, bevelSize: 0.05, bevelThickness: 0.08, bevelSegments: 3, curveSegments: 10 });
+  g.rotateY(Math.PI / 2);
+  g.translate(-largo / 2, 0, 0);
   return g;
 }
 
@@ -152,8 +190,8 @@ export function crearMundo({ pmrem }) {
   const matCaoba = new THREE.MeshPhysicalMaterial({
     map: caoba.mapa, bumpMap: caoba.bump, bumpScale: 1.2, roughness: 0.34, metalness: 0, clearcoat: 0.8, clearcoatRoughness: 0.22,
   });
-  const base = new THREE.Mesh(new RoundedBoxGeometry(14.8, 0.72, 5.6, 4, 0.1), matCaoba);
-  base.position.set(-3.6, Y_MESA + 0.36, 0);
+  const base = new THREE.Mesh(geoPeana(14.8), matCaoba);
+  base.position.set(-3.6, Y_MESA + 0.05, 0);
   grupoFijo.add(base);
   for (const x of [-9.6, 2.3]) {
     const c = new THREE.Mesh(geoCuna(), matCaoba);

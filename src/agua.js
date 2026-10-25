@@ -107,7 +107,7 @@ const FRAG_SIM = /* glsl */`
 const FRAG_ALTURA = /* glsl */`
   uniform sampler2D tSim; uniform sampler2D tPrev; uniform sampler2D tRuido;
   uniform vec2 uDominio; uniform float uTiempoMar; uniform float uDt; uniform float uRiple;
-  uniform float uEspuma; uniform float uAdv; uniform vec2 uTexelSim; uniform vec4 uCasco;
+  uniform float uEspuma; uniform float uAdv; uniform vec2 uTexelSim; uniform vec4 uCasco; uniform float uEscCasco;
   ${GLSL_OLEAJE}
   varying vec2 vUv;
   float total(vec2 p, vec2 uv){
@@ -133,7 +133,7 @@ const FRAG_ALTURA = /* glsl */`
     float vel = abs(texture2D(tSim, vUv).r - texture2D(tSim, vUv).g);
     emision += smoothstep(0.010, 0.05, vel) * 0.55 * uEspuma;
     // espuma del barco: borde del casco, ola de proa y estela
-    vec2 rel = p - uCasco.xy;
+    vec2 rel = (p - uCasco.xy) / uEscCasco; // en medidas del modelo del barco
     float dx = dot(rel, uCasco.zw), dz = rel.x * (-uCasco.w) + rel.y * uCasco.z;
     float semiAncho = 0.82 * sqrt(max(0.0, 1.0 - (dx / 4.3) * (dx / 4.3)));
     float dBorde = abs(dz) - semiAncho;
@@ -359,7 +359,7 @@ export function crearAgua({ renderer, botella, texRuido, cubo, relleno = 0.30 })
   const matAlt = quad(FRAG_ALTURA, {
     tSim: { value: null }, tPrev: { value: null }, tRuido: { value: texRuido }, uDominio: { value: new THREE.Vector2(DOM_U, DOM_V) },
     uTiempoMar: { value: 0 }, uDt: { value: 1 / 60 }, uRiple: { value: 1 }, uEspuma: { value: 1 }, uAdv: { value: 2 }, uTexelSim: { value: new THREE.Vector2(1 / RES_SIM[0], 1 / RES_SIM[1]) },
-    uAmp: U.uAmp, uLambda: U.uLambda, uDrag: U.uDrag, uCasco: { value: new THREE.Vector4(-4, 0, 1, 0) },
+    uAmp: U.uAmp, uLambda: U.uLambda, uDrag: U.uDrag, uCasco: { value: new THREE.Vector4(-4, 0, 1, 0) }, uEscCasco: { value: 1 },
   });
   const UV = {
     tColor: { value: null }, tProf: { value: null }, tFrente: { value: rtFrente.texture }, tFondo: { value: rtFondo.texture },
@@ -531,7 +531,7 @@ export function crearAgua({ renderer, botella, texRuido, cubo, relleno = 0.30 })
   }
 
   return {
-    estado: f, mar, U, uCasco: matAlt.uniforms.uCasco, configurarMar, agitar, actualizarFluido, simular, sincronizarUniformes, pasadaVolumen, configurarRelleno: (v) => { f.relleno = v; },
+    estado: f, mar, U, uCasco: matAlt.uniforms.uCasco, uEscCasco: matAlt.uniforms.uEscCasco, configurarMar, agitar, actualizarFluido, simular, sincronizarUniformes, pasadaVolumen, configurarRelleno: (v) => { f.relleno = v; },
     alturaEn: (u, v, t) => oleajeJS(u, v, t, mar),
     uVolumen: UV, rtFrente, rtFondo,
   };

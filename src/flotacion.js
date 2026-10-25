@@ -10,6 +10,7 @@ import { BASE_INT_X, CORCHO_INT_X } from './bottle.js';
 const MARGEN = 0.10;       // holgura mínima con el cristal
 const VEL_MAX = 6;         // velocidad máxima de desplazamiento sobre el agua (unidades/s)
 const GIRO_MAX = 1.5;      // velocidad máxima de cambio de rumbo (rad/s)
+export const ESCALA_BARCO = 0.8; // tamaño del barco respecto al modelo: así cabe tumbado con la botella de pie
 
 // Puntos extremos de la malla del barco en su marco local: el vértice más alejado en cada una de N direcciones.
 function puntosExtremos(grupo, N = 160) {
@@ -75,7 +76,8 @@ export function crearFlotacion({ barco, agua, botella }) {
     out.makeBasis(fwd, f.n, zz);
     Rz.makeRotationZ(cab); Rx.makeRotationX(bal);
     out.multiply(Rz).multiply(Rx);
-    if (esc !== 1) out.scale(tmp.set(esc, esc, esc));
+    const e = esc * ESCALA_BARCO;
+    out.scale(tmp.set(e, e, e));
     pos.copy(f.e1).multiplyScalar(u).addScaledVector(f.e2, v).addScaledVector(f.n, f.d + alt);
     out.setPosition(pos);
     return out;
@@ -152,7 +154,7 @@ export function crearFlotacion({ barco, agua, botella }) {
     // posición deseada: 40% del tramo de agua (algo a la izquierda del centro, como en la foto)
     seccion();
     if (sec.ok) {
-      const margen = 4.4, ancho = sec.hi - sec.lo;
+      const margen = 4.4 * ESCALA_BARCO, ancho = sec.hi - sec.lo;
       const objU = ancho > 2 * margen ? clamp(sec.lo + ancho * 0.40 + Math.sin(t * 0.21) * 0.5, sec.lo + margen, sec.hi - margen) : (sec.lo + sec.hi) / 2;
       const objV = sec.cv + Math.sin(t * 0.17 + 1.0) * 0.25;
       let du = (objU - u) * Math.min(1, dt * 2.2), dv = (objV - v) * Math.min(1, dt * 1.6);
@@ -170,11 +172,12 @@ export function crearFlotacion({ barco, agua, botella }) {
     const cy = rumbo.dot(f.e1), sy = rumbo.dot(f.e2);
 
     // olas bajo el casco
-    const muestra = (lx, lz) => agua.alturaEn(u + lx * cy + lz * sy, v + lx * sy - lz * cy, t);
+    const K = ESCALA_BARCO;
+    const muestra = (lx, lz) => agua.alturaEn(u + (lx * cy + lz * sy) * K, v + (lx * sy - lz * cy) * K, t);
     const hb = muestra(2.9, 0), hs = muestra(-2.9, 0), hp = muestra(0, -0.75), hst = muestra(0, 0.75), hc = muestra(0, 0);
-    const yObj = (hb + hs + hp + hst + 2 * hc) / 6 - 0.10;
-    const cabObj = Math.atan2(hb - hs, 5.8) * 0.75;
-    const balObj = Math.atan2(hp - hst, 1.5) * 0.65 - 0.05 * viento;
+    const yObj = (hb + hs + hp + hst + 2 * hc) / 6 - 0.10 * K;
+    const cabObj = Math.atan2(hb - hs, 5.8 * K) * 0.75;
+    const balObj = Math.atan2(hp - hst, 1.5 * K) * 0.65 - 0.05 * viento;
     // resorte-amortiguador para dar inercia al cabeceo y al balanceo
     const w = 4.6, z = 0.55;
     est.vcab += ((cabObj - est.cab) * w * w - 2 * z * w * est.vcab) * dt; est.cab += est.vcab * dt;
@@ -192,6 +195,7 @@ export function crearFlotacion({ barco, agua, botella }) {
 
     componer(M, est.u, est.v, est.y, cy, sy, est.cab + est.apoyo, est.bal + est.escora, Math.max(est.escala, 1e-3));
     agua.uCasco.value.set(est.u, est.v, cy, sy);
+    agua.uEscCasco.value = ESCALA_BARCO * Math.max(est.escala, 0.05);
     barco.grupo.visible = est.escala > 0.05;
     barco.grupo.matrixAutoUpdate = false;
     barco.grupo.matrix.copy(M);

@@ -9,20 +9,24 @@ export const BOCA_X = 15.08;        // cara de la boca
 export const CORCHO_INT_X = 13.8;   // extremo interior del corcho (cierra la cavidad)
 export const R_CUERPO = 5.2;
 const GROSOR_LADO = 0.42;
+const RADIO_BASE_EXT = 2.0;   // canto exterior de la base: redondo y grueso, como el vidrio soplado de la foto
+const RADIO_BASE_INT = 1.5;
+const X_HOMBRO = 2.8;         // inicio del hombro (largo y suave)
 
 const suave5 = (t) => { t = clamp(t, 0, 1); return t * t * t * (t * (t * 6 - 15) + 10); };
 
 // Radio exterior en función de x para el tramo cuerpo-hombro-cuello-labio (monótono en x).
+// El labio es un anillo grueso y abultado alrededor del corcho.
 const labio = crearSpline(
-  [13.0, 13.25, 13.5, 13.9, 14.4, 14.8, 15.0, 15.08],
-  [1.62, 1.9, 2.1, 2.17, 2.15, 2.05, 1.85, 1.62],
+  [13.0, 13.3, 13.55, 13.9, 14.4, 14.8, 15.0, 15.08],
+  [1.62, 1.66, 1.98, 2.32, 2.38, 2.28, 2.0, 1.62],
 );
 
 export function radioExterior(x) {
   if (x < -13.15) return 0; // lo gestiona la ruta de la base
-  if (x <= 3.5) return R_CUERPO - 0.04 * (x + 13.15) / 16.65;
+  if (x <= X_HOMBRO) return R_CUERPO - 0.04 * (x + 13.15) / (X_HOMBRO + 13.15);
   if (x <= 11.4) {
-    const t = (x - 3.5) / 7.9;
+    const t = (x - X_HOMBRO) / (11.4 - X_HOMBRO);
     return 1.7 + (R_CUERPO - 0.04 - 1.7) * (1 - suave5(Math.pow(t, 0.92)));
   }
   if (x <= 13.0) return 1.7 - 0.08 * (x - 11.4) / 1.6;
@@ -62,10 +66,10 @@ function unir(...tramos) {
 }
 
 function rutaExterior() {
-  const xc = BASE_X + 1.35, rc = R_CUERPO - 1.35;
+  const xc = BASE_X + RADIO_BASE_EXT, rc = R_CUERPO - RADIO_BASE_EXT;
   return unir(
     lineaPts([BASE_X, 0], [BASE_X, rc]),
-    arcoPts(xc, rc, 1.35, Math.PI, Math.PI / 2),
+    arcoPts(xc, rc, RADIO_BASE_EXT, Math.PI, Math.PI / 2),
     funcionPts(radioExterior, xc, 13.0),
     funcionPts(radioExterior, 13.0, BOCA_X - 0.02, 0.03),
     lineaPts([BOCA_X, 1.62], [BOCA_X, 1.12], 0.04),
@@ -74,14 +78,14 @@ function rutaExterior() {
 
 function radioInterior(x) {
   const ro = radioExterior(x);
-  if (x <= 3.5) return ro - GROSOR_LADO;
-  if (x <= 11.4) return ro - (GROSOR_LADO + 0.08 * ((x - 3.5) / 7.9));
+  if (x <= X_HOMBRO) return ro - GROSOR_LADO;
+  if (x <= 11.4) return ro - (GROSOR_LADO + 0.08 * ((x - X_HOMBRO) / (11.4 - X_HOMBRO)));
   return x <= 13.0 ? Math.max(1.12, ro - 0.5) : 1.12;
 }
 
 function rutaInterior() {
   const rin = R_CUERPO - GROSOR_LADO - 0.04 * 0.5;
-  const rci = 1.0, xc = BASE_INT_X + rci;
+  const rci = RADIO_BASE_INT, xc = BASE_INT_X + rci;
   return unir(
     lineaPts([BASE_INT_X, 0], [BASE_INT_X, rin - rci]),
     arcoPts(xc, rin - rci, rci, Math.PI, Math.PI / 2),
@@ -162,8 +166,8 @@ export function crearBotella({ segmentos = 128, nPuntos = 8192 } = {}) {
   const X0 = BASE_INT_X, X1 = CORCHO_INT_X, NT = 512;
   const tabla = new Float32Array(NT);
   const rInRaw = (x) => {
-    if (x < BASE_INT_X + 1.0) {
-      const dx = x - (BASE_INT_X + 1.0), rin = R_CUERPO - GROSOR_LADO - 0.02, rc = 1.0;
+    if (x < BASE_INT_X + RADIO_BASE_INT) {
+      const rc = RADIO_BASE_INT, dx = x - (BASE_INT_X + rc), rin = R_CUERPO - GROSOR_LADO - 0.02;
       return (rin - rc) + Math.sqrt(Math.max(0, rc * rc - dx * dx));
     }
     return radioInterior(x);

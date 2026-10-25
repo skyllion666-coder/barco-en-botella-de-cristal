@@ -1,5 +1,5 @@
 // Regresión: girar el móvil de horizontal a vertical (con cambio de orientación de pantalla) y volver.
-// En cada paso comprueba que ningún vértice del barco atraviesa el cristal y que el barco no da saltos.
+// En cada paso comprueba que ningún vértice del barco atraviesa el cristal, que no da saltos y que cabe sin encogerse.
 // Uso: node scripts/prueba_giro.mjs   (sale con código 1 si falla)
 import { createRequire } from 'node:module';
 const { chromium } = createRequire(import.meta.url)('/opt/node-tools/node_modules/playwright');
@@ -53,9 +53,10 @@ const r = await p.evaluate(() => {
     window.dispatchEvent(new DeviceOrientationEvent('deviceorientation', { alpha: 0, beta: phi, gamma: -90, absolute: false }));
     avanzar(dt, t); t += dt;
     const { pen, salto } = medir();
-    const f = fases[fase] || (fases[fase] = { pen: -1e9, salto: 0, escMin: 1 });
+    const f = fases[fase] || (fases[fase] = { pen: -1e9, salto: 0, escMin: 1, apoyo: 0 });
     f.pen = Math.max(f.pen, pen); f.salto = Math.max(f.salto, salto);
-    f.escMin = Math.min(f.escMin, window.__api.flotacion.estado.escala);
+    const est = window.__api.flotacion.estado;
+    f.escMin = Math.min(f.escMin, est.escala); f.apoyo = Math.max(f.apoyo, Math.abs(est.apoyo), Math.abs(est.escora));
     if (pen > peorPen) { peorPen = pen; enPeor = `${fase} phi=${phi.toFixed(0)}`; }
     if (salto > peorSalto) { peorSalto = salto; enSalto = `${fase} phi=${phi.toFixed(0)}`; }
   }
@@ -77,12 +78,14 @@ const r = await p.evaluate(() => {
   return { peorPen, enPeor, peorSalto, enSalto, nVert: locales.length, fases };
 });
 
-const MARGEN = 0.0, SALTO_MAX = 0.45; // desplazamiento máximo de un vértice por cuadro a 60 Hz (unidades de la escena)
-const ok = r.peorPen <= MARGEN && r.peorSalto <= SALTO_MAX && !errores.length;
+const MARGEN = 0.0, ESCALA_MIN = 0.99, SALTO_MAX = 0.45; // desplazamiento máximo de un vértice por cuadro a 60 Hz (unidades de la escena)
+const escMin = Math.min(...Object.values(r.fases).map((f) => f.escMin));
+const ok = r.peorPen <= MARGEN && r.peorSalto <= SALTO_MAX && escMin >= ESCALA_MIN && !errores.length;
 console.log(`vértices comprobados: ${r.nVert}`);
 console.log(`peor penetración en el cristal: ${r.peorPen.toFixed(3)} (${r.enPeor}) — límite ${MARGEN}`);
 console.log(`peor salto por cuadro: ${r.peorSalto.toFixed(3)} (${r.enSalto}) — límite ${SALTO_MAX}`);
-for (const [k, v] of Object.entries(r.fases)) console.log(`  ${k.padEnd(16)} penetración ${v.pen.toFixed(3).padStart(7)}  salto ${v.salto.toFixed(3)}  escala mín ${v.escMin.toFixed(2)}`);
+for (const [k, v] of Object.entries(r.fases)) console.log(`  ${k.padEnd(16)} penetración ${v.pen.toFixed(3).padStart(7)}  salto ${v.salto.toFixed(3)}  escala mín ${v.escMin.toFixed(2)}  apoyo máx ${v.apoyo.toFixed(2)} rad`);
+console.log(`escala mínima (el barco no debe encogerse): ${escMin.toFixed(3)} — límite ${ESCALA_MIN}`);
 console.log('errores de página:', errores.length ? errores : 'ninguno');
 console.log(ok ? 'PRUEBA SUPERADA' : 'PRUEBA FALLIDA');
 await b.close();

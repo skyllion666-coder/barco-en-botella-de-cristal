@@ -39,8 +39,17 @@ Probado en móvil real (GitHub Pages): al pasar de horizontal a vertical el barc
 - Arreglo: base del plano continua (`agua.js`), posición y rumbo del barco en 3D reproyectados cada cuadro, comprobación de ~150 puntos extremos del barco
   contra el cristal con corrección suave (se aparta, cabecea o escora como apoyándose en el vidrio y, como último recurso, se encoge un poco) (`flotacion.js`),
   y suavizado en dos etapas durante 1,2 s tras rotar la pantalla, sin contar el giro como sacudida y recalibrando cuando el móvil ya está quieto (`sensores.js`).
+- Barco reducido al 80 % (`ESCALA_BARCO` en `flotacion.js`): así cabe tumbado con la botella de pie, sin encogerse ni apoyarse.
 - Prueba de regresión: `node scripts/prueba_giro.mjs` (gira de horizontal a vertical con cambio de pantalla, y pone la botella de pie con el cuello arriba y abajo).
   Antes: salto de 6,9 unidades y 4,9 dentro del cristal. Después: nunca toca el cristal, salto máximo 0,37 por cuadro, escala mínima 0,97.
+
+### Mejoras de la botella (25-10-2026)
+- Reflejos: los paneles de luz del entorno tienen bordes suaves y la tira baja es una banda ancha y difusa; ya no hay líneas rectas largas de punta a punta (`entorno.js`).
+- Vidrio soplado: ondulaciones irregulares de la normal (anillos a lo largo del eje y vetas en el contorno, más marcadas en el cuello), iguales en las dos paredes (`vidrio.js`).
+- Forma: base más gruesa y redonda (radios 2,0 / 1,5), hombro más largo y suave (desde x = 2,8) y labio como anillo grueso de radio 2,38 (`bottle.js`).
+- Fondo: habitación desenfocada (estantería, marco de ventana, mueble) y más luces bokeh con borde suave y tonos variados (`mundo.js`).
+- Soporte: peana moldurada (zócalo, escalón y canto redondeado) y cunas con cantos redondeados y muesca lateral (`mundo.js`).
+- Coste en móvil sin medir: el vidrio suma unos senos por píxel en sus dos pasadas y el fondo pasa de 14 a 22 luces.
 
 ## Decisiones tomadas
 - Estilo: lo más realista posible (superar la foto de referencia).

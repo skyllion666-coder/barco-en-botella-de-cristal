@@ -2,11 +2,24 @@
 // Se renderiza a un cubemap HDR que usan el vidrio (muestreo directo) y los materiales PBR (PMREM).
 import * as THREE from 'three';
 
-function panel(ancho, alto, pos, color, intensidad, mirar = new THREE.Vector3()) {
-  const m = new THREE.Mesh(
-    new THREE.PlaneGeometry(ancho, alto),
-    new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(intensidad), side: THREE.DoubleSide, toneMapped: false }),
-  );
+// Panel de luz. 'suave' (0..0.5) es la fracción del borde que se apaga gradualmente: los bordes nítidos dibujaban
+// en el cilindro de la botella líneas de reflejo largas y perfectas que delataban el render.
+function panel(ancho, alto, pos, color, intensidad, mirar = new THREE.Vector3(), suave = 0) {
+  const c = new THREE.Color(color).multiplyScalar(intensidad);
+  const mat = suave > 0
+    ? new THREE.ShaderMaterial({
+      side: THREE.DoubleSide, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      uniforms: { uColor: { value: c }, uSuave: { value: suave } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: `
+        uniform vec3 uColor; uniform float uSuave; varying vec2 vUv;
+        void main(){
+          vec2 b = smoothstep(vec2(0.0), vec2(uSuave), vUv) * smoothstep(vec2(0.0), vec2(uSuave), 1.0 - vUv);
+          gl_FragColor = vec4(uColor * b.x * b.y, 1.0);
+        }`,
+    })
+    : new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide, toneMapped: false });
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(ancho, alto), mat);
   m.position.copy(pos);
   m.lookAt(mirar);
   return m;
@@ -59,20 +72,20 @@ export function crearEscenaEntorno() {
       e.add(panel(cw, ch, p, cielo, 18, O));
     }
   }
-  // Tira de luz cálida vertical a la derecha.
-  e.add(panel(0.9, 9, new THREE.Vector3(R * 0.95, 0.2, R * 0.30), new THREE.Color(1.0, 0.82, 0.62), 7, O));
+  // Tira de luz cálida vertical a la derecha (bordes suaves, más ancha y menos intensa).
+  e.add(panel(1.8, 9, new THREE.Vector3(R * 0.95, 0.2, R * 0.30), new THREE.Color(1.0, 0.82, 0.62), 5, O, 0.5));
   // Gran difusor cenital tenue.
-  e.add(panel(13, 7, new THREE.Vector3(0.5, R * 0.95, 1.5), new THREE.Color(0.92, 0.96, 1.0), 0.55, O));
+  e.add(panel(13, 7, new THREE.Vector3(0.5, R * 0.95, 1.5), new THREE.Color(0.92, 0.96, 1.0), 0.7, O, 0.45));
   // Luz de contra cálida detrás.
-  e.add(panel(3.5, 5, new THREE.Vector3(R * 0.55, 1.0, -R * 0.85), new THREE.Color(1.0, 0.72, 0.45), 6, O));
-  // Tira horizontal baja delante: brillo largo en la parte inferior del cristal.
-  e.add(panel(11, 0.7, new THREE.Vector3(0.5, -R * 0.42, R * 0.90), new THREE.Color(0.95, 0.97, 1.0), 3.2, O));
+  e.add(panel(3.5, 5, new THREE.Vector3(R * 0.55, 1.0, -R * 0.85), new THREE.Color(1.0, 0.72, 0.45), 6, O, 0.35));
+  // Banda baja delante: brillo en la parte inferior del cristal, ancha y difusa (antes una tira fina y dura).
+  e.add(panel(9, 2.0, new THREE.Vector3(0.5, -R * 0.42, R * 0.90), new THREE.Color(0.95, 0.97, 1.0), 1.3, O, 0.5));
   // Rebote frío bajo a la izquierda (mesa azulada).
-  e.add(panel(8, 1.6, new THREE.Vector3(-R * 0.7, -3.8, R * 0.55), new THREE.Color(0.45, 0.65, 0.9), 0.9, O));
+  e.add(panel(8, 1.6, new THREE.Vector3(-R * 0.7, -3.8, R * 0.55), new THREE.Color(0.45, 0.65, 0.9), 0.9, O, 0.5));
   // Puntos brillantes pequeños (lámparas lejanas).
   const puntos = [[-0.2, 0.28, 0.95], [0.35, 0.45, 0.8], [-0.85, 0.18, 0.5], [0.8, 0.38, -0.45]];
   for (const [x, y, z] of puntos) {
-    e.add(panel(0.45, 0.45, new THREE.Vector3(x, y, z).normalize().multiplyScalar(R * 0.98), new THREE.Color(1, 0.92, 0.8), 12, O));
+    e.add(panel(0.8, 0.8, new THREE.Vector3(x, y, z).normalize().multiplyScalar(R * 0.98), new THREE.Color(1, 0.92, 0.8), 9, O, 0.5));
   }
   return e;
 }
