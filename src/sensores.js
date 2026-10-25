@@ -117,10 +117,11 @@ export function crearSensores(lienzo) {
   // ---- respaldo en escritorio: arrastrar con el puntero inclina; teclado con flechas
   const punt = { activo: false, x: 0, y: 0, roll: 0, pitch: 0, vx: 0, vy: 0, anterior: null };
   const teclas = new Set();
-  lienzo.addEventListener('pointerdown', (e) => { punt.activo = true; punt.anterior = [e.clientX, e.clientY]; lienzo.setPointerCapture?.(e.pointerId); });
+  lienzo.addEventListener('pointerdown', (e) => { punt.activo = true; punt.anterior = [e.clientX, e.clientY]; try { lienzo.setPointerCapture?.(e.pointerId); } catch (_) { /* puntero ya suelto */ } });
   addEventListener('pointerup', () => { punt.activo = false; });
   lienzo.addEventListener('pointermove', (e) => {
     if (!punt.activo || !punt.anterior) return;
+    if (punt.bloqueado) { punt.anterior = [e.clientX, e.clientY]; return; } // pellizco o vista ampliada: no inclina
     const dx = e.clientX - punt.anterior[0], dy = e.clientY - punt.anterior[1];
     punt.anterior = [e.clientX, e.clientY];
     punt.roll = clamp(punt.roll + dx * 0.20, -80, 80);
@@ -150,6 +151,8 @@ export function crearSensores(lienzo) {
   };
   s.recalibrar = () => { if (tieneOrientacion) fijarCalibracion(); else { punt.roll = 0; punt.pitch = 0; } };
   s.activar = activarSensores;
+  // mientras se amplía o se mueve la vista ampliada, arrastrar no inclina la botella
+  s.bloquearArrastre = (b) => { punt.bloqueado = b; };
   s.inclinar = (roll, pitch) => { punt.roll = roll; punt.pitch = pitch; s.fuente = s.fuente === 'sensor' ? 'sensor' : 'puntero'; };
 
   s.actualizar = (dt) => {

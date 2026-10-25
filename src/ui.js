@@ -25,6 +25,7 @@ const CSS = `
 #panel .btn:active { background: rgba(255,238,215,.18); }
 #panel .btn.on { background: rgba(255,226,180,.22); border-color: rgba(255,226,180,.4); }
 #panel .nota { font-size: 11px; opacity: .6; line-height: 1.35; }
+#panel .firma { font-size: 11.5px; letter-spacing: .12em; text-align: center; opacity: .85; padding-bottom: 2px; border-bottom: 1px solid rgba(255,238,215,.14); }
 #aviso { position: absolute; left: 50%; top: calc(14px + env(safe-area-inset-top)); transform: translateX(-50%); padding: 9px 16px; border-radius: 22px; font-size: 13px; pointer-events: none; transition: opacity 1s; white-space: nowrap; }
 #girar { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 14px 20px; border-radius: 16px; font-size: 15px; text-align: center; display: none; pointer-events: none; }
 #activar { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); pointer-events: auto; padding: 16px 26px; border-radius: 16px; font-size: 16px; border: 0; color: inherit; cursor: pointer; display: none; text-align: center; }
@@ -82,7 +83,7 @@ export function crearUI({ clima, sensores, audio, alAjustarCalidad, estadoCalida
   const bVibrar = el('button', { class: 'btn', type: 'button', texto: 'Vibración: sí', onclick: () => { opciones.vibrar = !opciones.vibrar; if (opciones.vibrar) try { navigator.vibrate?.(40); } catch (_) { /* nada */ } sincronizar(); guardar(); } });
   const bHora = el('button', { class: 'btn', type: 'button', texto: 'Hora real: no', onclick: () => { clima.horaReal = !clima.horaReal; sincronizar(); guardar(); } });
   const estadoRend = el('div', { class: 'nota', texto: '' });
-  const nota = el('div', { class: 'nota', texto: 'Inclina o sacude el móvil para mover el mar. En el ordenador, arrastra con el ratón o usa las flechas. El sonido se activa con el altavoz.' });
+  const nota = el('div', { class: 'nota', texto: 'Inclina o sacude el móvil para mover el mar. Pellizca con dos dedos para ampliar o reducir, como una foto (ampliada, un dedo la mueve; doble toque amplía o vuelve). En el ordenador, arrastra con el ratón o usa las flechas, y la rueda amplía. El sonido se activa con el altavoz.' });
   const notaSensor = el('div', { class: 'nota', texto: '' });
   notaSensor.style.display = 'none';
   const estadoSensor = el('div', { class: 'nota', texto: 'Giroscopio: sin datos' });
@@ -91,6 +92,7 @@ export function crearUI({ clima, sensores, audio, alAjustarCalidad, estadoCalida
   ponerCredito(creditoBarco);
   const notaVersion = el('div', { class: 'nota', texto: version ? `Versión ${version}` : '' });
   const panel = el('div', { id: 'panel', class: 'ui-vidrio' }, [
+    el('div', { class: 'firma', texto: 'Creado por SKYLLION (FRANK)' }),
     estadoRend,
     el('div', {}, [el('label', {}, [el('span', { texto: 'Mar' }), el('span', { texto: 'calma ↔ tempestad' })]), sMar]),
     el('div', {}, [el('label', {}, [el('span', { texto: 'Viento' }), el('span', { texto: 'en las velas' })]), sViento]),

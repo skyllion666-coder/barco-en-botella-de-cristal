@@ -1,5 +1,7 @@
 # Barco en la botella
 
+Creado por **SKYLLION (FRANK)**.
+
 Web (luego app) en horizontal: botella de cristal con un velero y agua que reaccionan al movimiento del móvil, con clima y sonido.
 Ver `NOTAS.md` para el estado y las decisiones.
 

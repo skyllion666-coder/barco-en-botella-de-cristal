@@ -68,7 +68,7 @@ async function cargarBarco() {
   for (let intento = 1; ; intento++) {
     try { return await crearBarcoModelo(await descargar(URL_BARCO)); } catch (e) {
       console.warn('[app] no se pudo descargar el barco:', e);
-      if (aviso) { aviso.textContent = 'Sin conexión: reintentando descargar el barco…'; aviso.style.opacity = '1'; }
+      if (aviso) { aviso.firstChild.textContent = 'Sin conexión: reintentando descargar el barco…'; aviso.style.opacity = '1'; }
       await new Promise((r) => setTimeout(r, Math.min(15, 2 * intento) * 1000));
     }
   }
@@ -104,14 +104,26 @@ const reflejo = crearReflejo({ interior: mundo.interior, barco, renderer: canal.
 
 const camara = new THREE.PerspectiveCamera(20, 2, 5, 220);
 const OBJETIVO = new THREE.Vector3(0.9, -1.2, 0);
+// Ampliar como una foto: zoom.z (1 = vista normal) y desplazamiento de la vista ampliada (unidades del mundo, a
+// la derecha y arriba de la cámara). La proyección sigue centrada (el agua y el vidrio lo necesitan): se mueve la cámara.
+const zoom = { z: 1, x: 0, y: 0, alto: 1, objetivo: null };
+const derCam = new THREE.Vector3(), arrCam = new THREE.Vector3(), mira = new THREE.Vector3();
 function ajustarCamara(aspecto) {
   camara.aspect = aspecto;
   const mitadAncho = 17.6;
   const tanV = Math.tan(THREE.MathUtils.degToRad(camara.fov / 2));
   const dist = Math.max(mitadAncho / (tanV * aspecto), 30);
   const elev = THREE.MathUtils.degToRad(9);
-  camara.position.set(OBJETIVO.x, OBJETIVO.y + dist * Math.sin(elev), OBJETIVO.z + dist * Math.cos(elev));
-  camara.lookAt(OBJETIVO);
+  zoom.alto = dist * tanV; // media altura visible a z = 1
+  // sin salirse del encuadre normal
+  zoom.x = THREE.MathUtils.clamp(zoom.x, -zoom.alto * aspecto * (1 - 1 / zoom.z), zoom.alto * aspecto * (1 - 1 / zoom.z));
+  zoom.y = THREE.MathUtils.clamp(zoom.y, -zoom.alto * (1 - 1 / zoom.z), zoom.alto * (1 - 1 / zoom.z));
+  derCam.set(1, 0, 0);
+  arrCam.set(0, Math.cos(elev), -Math.sin(elev));
+  camara.position.set(OBJETIVO.x, OBJETIVO.y + dist * Math.sin(elev), OBJETIVO.z + dist * Math.cos(elev))
+    .addScaledVector(derCam, zoom.x).addScaledVector(arrCam, zoom.y);
+  camara.lookAt(mira.copy(OBJETIVO).addScaledVector(derCam, zoom.x).addScaledVector(arrCam, zoom.y));
+  camara.zoom = zoom.z;
   camara.updateProjectionMatrix();
   camara.updateMatrixWorld(true);
   U.uProy.value.set(camara.projectionMatrix.elements[0], camara.projectionMatrix.elements[5]);
@@ -160,12 +172,88 @@ if (modoCaptura) clima.saltar();
 
 let ui = null;
 
+// ---- ampliar y reducir como una foto: pellizco con dos dedos (o rueda del ratón); ampliada, un dedo la mueve;
+// doble toque amplía ahí o vuelve a la vista normal. Al reducir del todo, vuelve a su sitio.
+const ZOOM_MAX = 4;
+const dedos = new Map();
+let pellizco = null, huboGesto = false, ultimoToque = { t: 0, x: 0, y: 0 };
+// pone el zoom z manteniendo quieto el punto del mundo que estaba bajo (sx0, sy0) con z0 y pan0, ahora bajo (sx, sy)
+function ponerZoom(z, sx, sy, z0 = zoom.z, sx0 = sx, sy0 = sy, x0 = zoom.x, y0 = zoom.y) {
+  z = THREE.MathUtils.clamp(z, 1, ZOOM_MAX);
+  const k = 2 * zoom.alto / innerHeight; // unidades del mundo por píxel a z = 1
+  const mx0 = sx0 - innerWidth / 2, my0 = sy0 - innerHeight / 2, mx = sx - innerWidth / 2, my = sy - innerHeight / 2;
+  zoom.z = z;
+  zoom.x = x0 + k * (mx0 / z0 - mx / z);
+  zoom.y = y0 + k * (-my0 / z0 + my / z);
+  if (z < 1.02) { zoom.z = 1; zoom.x = 0; zoom.y = 0; }
+  ajustarCamara(innerWidth / innerHeight);
+  sensores.bloquearArrastre(zoom.z > 1 || dedos.size > 1);
+}
+lienzo.addEventListener('pointerdown', (e) => {
+  dedos.set(e.pointerId, [e.clientX, e.clientY]);
+  if (dedos.size === 1) huboGesto = false;
+  if (dedos.size === 2) {
+    const [a, b] = [...dedos.values()];
+    pellizco = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), m: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], z: zoom.z, x: zoom.x, y: zoom.y };
+    huboGesto = true; zoom.objetivo = null;
+    sensores.bloquearArrastre(true);
+  }
+});
+lienzo.addEventListener('pointermove', (e) => {
+  if (!dedos.has(e.pointerId)) return;
+  const antes = dedos.get(e.pointerId);
+  dedos.set(e.pointerId, [e.clientX, e.clientY]);
+  if (dedos.size >= 2 && pellizco) {
+    const [a, b] = [...dedos.values()];
+    const d = Math.hypot(a[0] - b[0], a[1] - b[1]), m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    ponerZoom(pellizco.z * d / Math.max(pellizco.d, 1), m[0], m[1], pellizco.z, pellizco.m[0], pellizco.m[1], pellizco.x, pellizco.y);
+  } else if (dedos.size === 1 && zoom.z > 1) {
+    // ampliada: un dedo mueve la vista
+    const dx = e.clientX - antes[0], dy = e.clientY - antes[1];
+    if (Math.abs(dx) + Math.abs(dy) > 0) {
+      const k = 2 * zoom.alto / innerHeight / zoom.z;
+      zoom.x -= dx * k; zoom.y += dy * k;
+      ajustarCamara(innerWidth / innerHeight);
+    }
+  }
+});
+const soltarDedo = (e) => {
+  dedos.delete(e.pointerId);
+  if (dedos.size < 2) pellizco = null;
+  if (dedos.size === 0) sensores.bloquearArrastre(zoom.z > 1);
+};
+lienzo.addEventListener('pointercancel', soltarDedo);
+lienzo.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  zoom.objetivo = null;
+  ponerZoom(zoom.z * Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY);
+}, { passive: false });
+// doble toque: amplía ×2,5 donde se toca, o vuelve a la vista normal (con animación)
+function dobleToque(x, y) {
+  zoom.objetivo = zoom.z > 1.05 ? { z: 1, x, y } : { z: 2.5, x, y };
+}
+function animarZoom(dt) {
+  const o = zoom.objetivo;
+  if (!o) return;
+  const z = zoom.z + (o.z - zoom.z) * Math.min(1, dt * 9);
+  ponerZoom(Math.abs(z - o.z) < 0.01 ? o.z : z, o.x, o.y);
+  if (zoom.z === o.z || (o.z === 1 && zoom.z === 1)) zoom.objetivo = null;
+}
+
 // Tocar la botellita que flota: se abre su mensaje. Tocar el barco: suena su campana.
 const rayoToque = new THREE.Raycaster(), ndcToque = new THREE.Vector2();
 let inicioToque = null;
 lienzo.addEventListener('pointerdown', (e) => { inicioToque = [e.clientX, e.clientY]; });
 lienzo.addEventListener('pointerup', (e) => {
+  const gesto = huboGesto;
+  soltarDedo(e);
+  if (gesto || dedos.size > 0) return; // fue un pellizco
   if (!inicioToque || Math.hypot(e.clientX - inicioToque[0], e.clientY - inicioToque[1]) > 12) return; // fue un arrastre
+  const ahora = performance.now();
+  if (ahora - ultimoToque.t < 320 && Math.hypot(e.clientX - ultimoToque.x, e.clientY - ultimoToque.y) < 40) {
+    ultimoToque.t = 0; dobleToque(e.clientX, e.clientY); return;
+  }
+  ultimoToque = { t: ahora, x: e.clientX, y: e.clientY };
   const r = lienzo.getBoundingClientRect();
   ndcToque.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
   rayoToque.setFromCamera(ndcToque, camara);
@@ -287,6 +375,7 @@ function cuadro(ahora) {
   rend.cuadros++;
   if (ahora - rend.desde >= 1000) { rend.fps = Math.round(rend.cuadros * 1000 / (ahora - rend.desde)); rend.cuadros = 0; rend.desde = ahora; }
   adaptarCalidad(Math.min(dtMs, 100));
+  animarZoom(dt);
   avanzar(dt, tTotal);
   dibujar(tTotal, dt);
 }

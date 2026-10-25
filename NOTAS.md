@@ -160,6 +160,13 @@ Probado en móvil real (GitHub Pages): al pasar de horizontal a vertical el barc
 - Espuma de las crestas (`agua.js`): encaje de filamentos y huecos, semitransparente, islas solo en la espuma recién hecha, con brillos.
 - Gotas de lluvia en el cristal (`gotas.js`, `vidrio.js`): más planas y pequeñas, filo más fino; antes parecían perlas.
 
+### Ampliar como una foto y firma (versión 17)
+- Pellizco con dos dedos amplía y reduce (×1 a ×4) manteniendo bajo los dedos lo que había; se queda como se deja; reducido del todo
+  vuelve a la vista normal. Ampliada, un dedo mueve la vista (sin salirse del encuadre) y no inclina la botella; doble toque amplía
+  ×2,5 donde se toca o vuelve; rueda del ratón en el ordenador. Se mueve la cámara (la proyección sigue centrada, como necesitan
+  el agua y el vidrio) y `camara.zoom`. Prueba con eventos de puntero sintéticos (Chromium sin GPU va demasiado lento para gestos).
+- «Creado por SKYLLION (FRANK)» en la pantalla de carga, arriba en Ajustes y en el README (petición del usuario).
+
 ### Sorpresas (no contárselas al usuario hasta que las vea)
 - Bioluminiscencia: de noche el agua agitada, la estela, las burbujas y las salpicaduras brillan en azul verdoso.
 - Estrellas fugaces de noche, cada 6-16 s, dentro de la botella.
