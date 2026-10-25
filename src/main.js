@@ -18,6 +18,7 @@ import { crearGotas } from './gotas.js';
 import { crearViento } from './viento.js';
 import { crearSalpicaduras } from './salpicaduras.js';
 import { crearBotellita } from './botellita.js';
+import { crearGaviotas } from './gaviotas.js';
 
 const params = new URLSearchParams(location.search);
 const num = (k, d) => (params.has(k) ? parseFloat(params.get(k)) : d);
@@ -35,11 +36,14 @@ const ruido = texRuido(256);
 // que también se usa si un modelo no se pudiera descargar).
 const BARCOS = { galeon: { nombre: 'Galeón', url: 'barcos/galeon.glb' }, ottoman: { nombre: 'Otomano', url: 'barcos/ottoman.glb' } };
 const cacheBarcos = {};
-// XMLHttpRequest y no fetch: así también funciona abriendo la página como archivo local
+// XMLHttpRequest y no fetch: así también funciona abriendo la página como archivo local.
+// En la versión para enlace de claude.ai (window.__barcosTexto) los barcos van como texto base64 (.b64.txt).
 const descargar = (url) => new Promise((ok, mal) => {
+  const texto = !!window.__barcosTexto;
   const x = new XMLHttpRequest();
-  x.open('GET', url); x.responseType = 'arraybuffer';
-  x.onload = () => (x.status === 200 || (x.status === 0 && x.response) ? ok(new Uint8Array(x.response)) : mal(new Error('HTTP ' + x.status)));
+  x.open('GET', texto ? url + '.b64.txt' : url); x.responseType = texto ? 'text' : 'arraybuffer';
+  const datos = () => (texto ? Uint8Array.from(atob(x.response.trim()), (c) => c.charCodeAt(0)) : new Uint8Array(x.response));
+  x.onload = () => (x.status === 200 || (x.status === 0 && x.response) ? ok(datos()) : mal(new Error('HTTP ' + x.status)));
   x.onerror = () => mal(new Error('sin conexión'));
   x.send();
 });
@@ -75,6 +79,7 @@ const viento = crearViento();
 const salpicaduras = crearSalpicaduras({ escena: mundo.interior.escena, agua, botella });
 const proaBarco = new THREE.Vector3();
 const botellita = crearBotellita({ escena: mundo.interior.escena, agua, botella });
+const gaviotas = crearGaviotas({ escena: mundo.interior.escena, agua, botella });
 // un punto al azar de la borda del barco (y hacia fuera), en el marco de la botella: por ahí cae el agua
 const bordaP = new THREE.Vector3(), bordaD = new THREE.Vector3();
 function puntoBorda() {
@@ -237,6 +242,7 @@ function avanzar(dt, t) {
   salpicaduras.actualizar(dt, t, { viento: viento.total, barco: { vcab: flotacion.estado.vcab, proa: proaBarco, golpe: flotacion.estado.golpe, puntoBorda } });
   salpicaduras.color(clima.luzFinal, clima.bioluminiscencia);
   botellita.actualizar(dt, t, { viento: viento.total, barcoU: flotacion.estado.u, barcoV: flotacion.estado.v, radioBarco: 0.8 * 0.55 * (barco.info?.eslora ?? 8.4) + 1.2 });
+  gaviotas.actualizar(dt, t, { clima: clima.p, barco, centroU: flotacion.estado.u, centroV: flotacion.estado.v, viento: viento.total, graznar: () => audio?.gaviota() });
   agua.ponerBioluminiscencia(clima.bioluminiscencia);
 }
 
@@ -298,6 +304,6 @@ if (modoCaptura) {
   window.__listo = true;
 }
 window.__api = {
-  clima, sensores, agua, calidad, redibujar: (dt) => dibujar(tTotal, dt), camara, canal, avanzar, botella, audio, gotas, cambiarBarco, viento, salpicaduras, botellita,
+  clima, sensores, agua, calidad, redibujar: (dt) => dibujar(tTotal, dt), camara, canal, avanzar, botella, audio, gotas, cambiarBarco, viento, salpicaduras, botellita, gaviotas,
   get flotacion() { return flotacion; }, get barco() { return barco; },
 };

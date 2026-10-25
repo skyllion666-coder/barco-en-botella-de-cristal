@@ -39,4 +39,9 @@ if (idx > 0) {
   const plantillaA = readFileSync(resolve(raiz, 'src/artefacto.template.html'), 'utf8');
   writeFileSync(salida, plantillaA.replace('/*__APP__*/', () => js));
   console.log(`artefacto: ${salida}`);
+  // el visor de claude.ai no sirve .glb: los barcos van al lado como texto base64
+  const dirB = resolve(dirname(salida), 'barcos');
+  mkdirSync(dirB, { recursive: true });
+  for (const id of ['galeon', 'ottoman']) writeFileSync(resolve(dirB, `${id}.glb.b64.txt`), readFileSync(resolve(raiz, `assets/barco-${id}.glb`)).toString('base64'));
+  console.log(`barcos en texto: ${dirB}`);
 }

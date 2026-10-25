@@ -13,11 +13,16 @@ export async function crearBarcoModelo(datos) {
   const extras = gltf.scene.userData || {};
   const grupo = new THREE.Group();
 
-  // Animación con el viento (viento.js) en el sombreador de vértices, según los atributos que traiga cada malla:
-  //  velas (_EMPUJE, _VELA): se llenan con las rachas (con inercia), ondas que corren del borde sujeto al libre,
-  //    el borde libre flamea más y, sin viento, la tela floja gualdrapea; los pliegues cambian la luz;
-  //  banderas (_ONDEO): ondean desde el asta, más rápido y más amplio con las rachas;
-  //  cabos (_CABO, _SIGUE): vibran con el viento, se destensan cuando para y los enganchados a una vela la siguen.
+  // Animación con el viento (viento.js) en el sombreador de vértices, según los atributos que traiga cada malla.
+  // Velas (_EMPUJE, _VELA, _PLANO):
+  //   sin viento cuelgan: sin bolsa, con pliegues verticales que se ahondan hacia el borde libre, el pujamen cae un
+  //   poco y la tela se mece despacio con el barco;
+  //   con poco viento (o una racha que empieza) flamean: ondas grandes que corren del borde sujeto al libre;
+  //   llenas, se tensan: bolsa grande que respira con las rachas y solo tiembla la baluma.
+  // Banderas (_ONDEO, _ASTA): sin viento caen junto al asta con pliegues; con viento se extienden y ondean,
+  //   más deprisa y más amplio con las rachas (responden al momento, no tienen la inercia de las velas).
+  // Cabos (_CABO, _SIGUE, _COLGAR): flojos hacen catenaria y se mecen; tensos se estiran y vibran con el viento;
+  //   los enganchados a una vela (escotas, brazas) siguen su movimiento.
   const uViento = {
     uTiempo: { value: 0 }, uFase: { value: 0 }, uFaseB: { value: 0 },
     uLlenado: { value: 0.3 }, uViento: { value: 0.3 }, uFlojo: { value: 0 },
@@ -26,38 +31,73 @@ export async function crearBarcoModelo(datos) {
     uniform float uTiempo; uniform float uFase; uniform float uFaseB; uniform float uLlenado; uniform float uViento; uniform float uFlojo;
     varying float vPliegue;
     #ifdef VELA
-      attribute vec3 _empuje; attribute vec4 _vela;
+      attribute vec3 _empuje; attribute vec4 _vela; attribute vec3 _plano;
     #endif
     #ifdef BANDERA
-      attribute vec3 _ondeo;
+      attribute vec3 _ondeo; attribute vec4 _asta;
     #endif
     #ifdef CABO
-      attribute vec4 _cabo; attribute vec4 _sigue;
+      attribute vec4 _cabo; attribute vec4 _sigue; attribute vec3 _colgar;
     #endif
     // ondas de flameo: corren por la tela del borde sujeto (w = 0) al libre (w = 1), con un armónico irregular
-    float ondaVela(float w, float h){ return sin(uFase - w * 8.0 + h * 1.5) * 0.65 + sin(uFase * 1.73 - w * 15.0 + 2.1) * 0.35; }
-    // amplitud relativa al tamaño de la vela: el borde libre flamea mucho más; floja, gualdrapea
-    float ampFlameo(float w){ return (0.15 + 0.85 * w * w) * (0.008 + 0.024 * uViento + 0.055 * uFlojo); }`;
+    float ondaVela(float w, float h){ return sin(uFase - w * 7.0 + h * 1.5) * 0.65 + sin(uFase * 1.73 - w * 13.0 + 2.1) * 0.35; }
+    // lo llena y tensa que está la tela (0 colgando, 1 llena) y cuánto flamea (viento que no llega a llenarla)
+    float llena(){ return smoothstep(0.06, 0.75, uLlenado); }
+    float flamea(){ return smoothstep(0.03, 0.22, uViento) * (1.0 - smoothstep(0.3, 0.8, uLlenado)); }
+    // amplitud del flameo, relativa al tamaño de la vela: el borde libre se mueve mucho más que el sujeto
+    float ampFlameo(float w){ return (0.1 + 0.9 * w * w) * (0.016 * llena() * min(uViento, 1.4) + 0.05 * flamea()); }`;
   const MOV = `
     vPliegue = 0.0;
     #ifdef VELA
+    {
+      float f = llena(), suelta = 1.0 - f, tam = _vela.z, w = _vela.x;
       vec3 dv = normalize(_empuje + vec3(1e-6));
-      float ov = ondaVela(_vela.x, _vela.y);
-      float av = ampFlameo(_vela.x) * _vela.z;
-      transformed += _empuje * (0.02 + 0.10 * uLlenado * (1.0 - 0.6 * uFlojo)) + dv * ov * av;
-      vPliegue = ov * clamp(av * 7.0, 0.0, 1.0);
+      // colgando: fuera la bolsa, pliegues verticales y el borde libre cae y se mece
+      transformed += _plano * suelta * 0.9;
+      float fasePl = _vela.w * 31.4 + sin(_vela.w * 11.0) * 1.3 + uTiempo * 0.3;
+      float hondo = suelta * (0.25 + 0.75 * w) * 0.03 * tam;
+      transformed += dv * (sin(fasePl) * hondo + sin(uTiempo * 0.9 + _vela.y * 1.5) * 0.03 * tam * w * suelta);
+      transformed.y -= suelta * w * w * 0.035 * tam;
+      // llena: más bolsa, que respira con las rachas
+      transformed += _empuje * f * (0.07 + 0.05 * sin(uTiempo * 2.1 + _vela.y) * min(uViento, 1.4));
+      // flameo: ondas que corren por la tela
+      float ov = ondaVela(w, _vela.y);
+      float av = ampFlameo(w) * tam;
+      transformed += dv * ov * av;
+      // los pliegues y las ondas se ven por la luz: unas partes más claras y otras más oscuras
+      vPliegue = cos(fasePl) * suelta * (0.25 + 0.75 * w) * 0.9 + ov * clamp(av / tam * 14.0, 0.0, 1.0);
+    }
     #endif
     #ifdef BANDERA
-      float tb = length(_ondeo);
+    {
+      float fb = smoothstep(0.03, 0.55, uViento), tb = length(_ondeo), largo = _asta.w;
+      // sin viento cae junto al asta (gira hacia abajo desde ella), con pliegues; se mece un poco
+      float th = (1.0 - fb) * (1.3 + 0.12 * sin(uTiempo * 0.8)) + 0.18 * fb * (1.0 - fb);
+      transformed += _asta.xyz * (cos(th) - 1.0) - vec3(0.0, 1.0, 0.0) * length(_asta.xyz) * sin(th);
+      // ondas que corren del asta a la punta, más amplias hacia la punta
       float ob = sin(uFaseB - tb * 7.0) + 0.35 * sin(uFaseB * 1.9 - tb * 15.0 + 1.3);
-      transformed += _ondeo * ob * (0.05 + 0.10 * uViento);
-      vPliegue = ob * tb * 0.6;
+      float pl = sin(tb * 9.0 + uTiempo * 0.6);
+      transformed += _ondeo * largo * (ob * (0.05 + 0.11 * fb) * fb + pl * 0.08 * (1.0 - fb));
+      // la punta además sube y baja (el ondeo no es solo de lado)
+      transformed.y += sin(uFaseB * 0.9 - tb * 6.0) * 0.04 * largo * tb * fb;
+      vPliegue = (ob * fb + pl * (1.0 - fb)) * tb;
+    }
     #endif
     #ifdef CABO
-      float vib = sin(uTiempo * (9.0 + 8.0 * uViento) + _cabo.w) * (0.006 + 0.022 * uViento) + sin(uTiempo * 1.3 + _cabo.w * 2.0) * 0.012;
-      transformed += _cabo.xyz * vib;
-      transformed.y -= length(_cabo.xyz) * 0.05 * uFlojo;
-      transformed += _sigue.xyz * ondaVela(_sigue.w, 0.3) * ampFlameo(_sigue.w);
+    {
+      float tension = smoothstep(0.08, 0.7, uLlenado), floja = 1.0 - tension;
+      float lc = length(_colgar);
+      // flojo: catenaria (cae en el medio) y se mece despacio
+      transformed += _colgar * floja * 0.045;
+      transformed += _cabo.xyz * sin(uTiempo * 1.1 + _cabo.w) * lc * 0.05 * floja;
+      // tenso: vibra, más deprisa y más fuerte cuanto más viento
+      float vv = min(uViento, 1.4);
+      transformed += _cabo.xyz * sin(uTiempo * (16.0 + 10.0 * vv) + _cabo.w) * 0.012 * vv * vv * tension;
+      // enganchado a una vela: la sigue (flameo, vaivén y caída del borde libre cuando cuelga)
+      float ws = _sigue.w, suelta = 1.0 - llena();
+      transformed += _sigue.xyz * (ondaVela(ws, 0.3) * ampFlameo(ws) + sin(uTiempo * 0.9 + 0.45) * 0.03 * ws * suelta);
+      transformed.y -= length(_sigue.xyz) * suelta * ws * ws * 0.035;
+    }
     #endif`;
   function animar(mat, tipo) {
     mat.defines = { ...(mat.defines || {}), [tipo.vela ? 'VELA' : tipo.bandera ? 'BANDERA' : 'CABO']: 1 };
@@ -81,6 +121,10 @@ export async function crearBarcoModelo(datos) {
     m.frustumCulled = false;
     const at = m.geometry.attributes;
     const tipo = { vela: !!at._empuje, bandera: !!at._ondeo, cabo: !!at._cabo };
+    // modelos preparados antes de estos atributos: ceros
+    if (tipo.vela && !at._plano) m.geometry.setAttribute('_plano', new THREE.BufferAttribute(new Float32Array(at.position.count * 3), 3));
+    if (tipo.bandera && !at._asta) m.geometry.setAttribute('_asta', new THREE.BufferAttribute(new Float32Array(at.position.count * 4), 4));
+    if (tipo.cabo && !at._colgar) m.geometry.setAttribute('_colgar', new THREE.BufferAttribute(new Float32Array(at.position.count * 3), 3));
     if (tipo.vela || tipo.bandera || tipo.cabo) {
       m.material = m.material.clone();
       m.material.side = THREE.DoubleSide;

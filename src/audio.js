@@ -127,6 +127,32 @@ export function sonarCampana(ctx, destino, t0, fuerza = 1) {
   return 4.5;
 }
 
+// Graznido de gaviota lejana: dos o tres «quiá» (subida rápida de tono y caída larga), voz áspera de diente de
+// sierra pasada por dos formantes. Devuelve cuánto dura.
+export function sonarGaviota(ctx, destino, t0, fuerza = 1) {
+  const salida = ctx.createGain(); salida.gain.value = 0.07 * fuerza; salida.connect(destino);
+  const veces = 2 + Math.floor(Math.random() * 2), f0 = 1150 + Math.random() * 250;
+  let t = t0;
+  for (let i = 0; i < veces; i++) {
+    const d = i === veces - 1 ? 0.42 : 0.26;
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(f0 * 0.75, t);
+    o.frequency.exponentialRampToValueAtTime(f0 * 1.35, t + 0.05);
+    o.frequency.exponentialRampToValueAtTime(f0 * 0.62, t + d);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(1, t + 0.03);
+    g.gain.setValueAtTime(0.8, t + d * 0.6); g.gain.exponentialRampToValueAtTime(0.001, t + d);
+    for (const [fr, q, a] of [[1900, 3, 1], [3300, 4, 0.5]]) {
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = fr; bp.Q.value = q;
+      const ga = ctx.createGain(); ga.gain.value = a;
+      o.connect(bp); bp.connect(ga); ga.connect(g);
+    }
+    g.connect(salida); o.start(t); o.stop(t + d + 0.05);
+    t += d + 0.07 + Math.random() * 0.05;
+  }
+  return t - t0;
+}
+
 export function crearAudio() {
   let ctx = null, maestro = null, nodos = null;
   const est = { activo: false, siguienteCrujido: 3, t: 0 };
@@ -248,5 +274,11 @@ export function crearAudio() {
     }
   }
 
-  return { get activo() { return est.activo; }, alternar, actualizar, trueno, sintetizarTrueno, campanas, sonarCampana };
+  // gaviotas: más bajas cuanto más fuerte sopla (el viento se las lleva)
+  function gaviota() {
+    if (!ctx || !est.activo) return;
+    sonarGaviota(ctx, maestro, ctx.currentTime + 0.05, 0.7 + Math.random() * 0.5);
+  }
+
+  return { get activo() { return est.activo; }, alternar, actualizar, trueno, sintetizarTrueno, campanas, sonarCampana, gaviota };
 }

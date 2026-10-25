@@ -34,9 +34,13 @@ const MODELOS = {
     velas: ['acmat_33.003', 'acmat_26.003', 'acmat_22.003'],
     banderas: ['acmat_57', 'acmat_14.003', 'acmat_13.003'],
     asta: 'proa',              // las banderas cuelgan hacia popa desde su borde de proa
+    // las del modelo eran de Paraguay, Egipto y otra tricolor: rojigualda en el mayor y cruz de Borgoña (la de la
+    // Armada de los galeones) en trinquete y mesana; 1,7 veces más grandes
+    banderasNuevas: { escala: 1.7, cual: { 'acmat_14.003': 'espana', 'acmat_13.003': 'borgona', acmat_57: 'borgona' } },
     simplificar: { ratio: 0.08, error: 0.0016, min: 1200 }, textura: 1024,
     // el rojo del casco y los remates pasa a marrón oscuro (no en banderas ni escudos)
     marron: { excepto: ['acmat_57', 'acmat_14.003', 'acmat_13.003', ...Array.from({ length: 15 }, (_, i) => `acmat_${41 + i}.003`)] },
+    radioCabo: 0.03,           // más gruesas son vergas y palos
     rumbo: -0.30,
     credito: '«Galeone II», de gogiart (Sketchfab), licencia CC-BY 4.0. Modificado.',
     colores: {},
@@ -45,7 +49,7 @@ const MODELOS = {
   ottoman: {
     entrada: 'assets/barco-original.glb', salida: 'assets/barco-ottoman.glb',
     lineaAgua: 0.03, alturaFinal: 7.0,
-    velas: ['Sail'], banderas: [], asta: 'proa',
+    velas: ['Sail'], banderas: [], asta: 'proa', radioCabo: 0.035,
     simplificar: { ratio: 0.22, error: 0.0012, min: 1500 }, textura: 1024,
     rumbo: -0.30,
     credito: '«Ottoman Coastal Trade Tall Ship», de polygora (Sketchfab), licencia CC-BY. Modificado.',
@@ -76,7 +80,7 @@ const contar = () => root.listMeshes().reduce((s, m) => s + m.listPrimitives().r
 console.log(`${nombre}: ${Math.round(contar())} triángulos, ${root.listMeshes().length} mallas`);
 // los materiales con nombre de vela o bandera; las mallas que los usan se tratan aparte
 const esVela = (p) => C.velas.includes(p.getMaterial()?.getName());
-const esBandera = (p) => C.banderas.includes(p.getMaterial()?.getName());
+const esBandera = (p) => C.banderas.includes(p.getMaterial()?.getName()) || !!p.getMaterial()?.getName().startsWith('bandera_');
 
 // ---- 1) hornear transformaciones del mundo y colocar en el marco de la app
 const bb = getBounds(escena);
@@ -211,13 +215,19 @@ function ejesPlano(n) {
 }
 
 let nVelas = 0, nBanderas = 0;
+const bolsasVela = [];
 const muestrasVela = []; // vértices de vela (posición, dirección de hinchado, w, tamaño) para enganchar los cabos
 for (const m of root.listMeshes()) for (const p of m.listPrimitives()) {
   if (!esVela(p) && !esBandera(p)) continue;
   const bandera = esBandera(p);
-  const { P, N, idx } = subdividirHasta(p, bandera ? 0.08 : 0.3);
+  // banderas: más grandes (las del modelo apenas se ven) y con su propia tela; se agrandan desde el asta
+  const ampliar = bandera && C.banderasNuevas ? C.banderasNuevas.escala : 1;
+  const { P, N, idx } = subdividirHasta(p, bandera ? 0.08 / ampliar : 0.3);
   const attr = new Float32Array(P.length * 3);
   const vela = bandera ? null : new Float32Array(P.length * 4);
+  const plano = bandera ? null : new Float32Array(P.length * 3);
+  const asta = bandera ? new Float32Array(P.length * 4) : null;
+  const uvs = bandera && C.banderasNuevas ? new Float32Array(P.length * 2) : null;
   for (const comp of componentes(P, idx)) {
     const pts = comp.map((i) => P[i]);
     let n = norm(media(comp.map((i) => N[i])));
@@ -231,10 +241,21 @@ for (const m of root.listMeshes()) for (const p of m.listPrimitives()) {
       nBanderas++;
       // el asta está en el extremo de la bandera más hacia proa (o popa) a lo largo de su eje horizontal
       const haciaProa = eU[0] >= 0 ? 1 : -1;
+      const usaSu = C.asta === 'proa' ? haciaProa < 0 : haciaProa > 0;
+      const tDe = (j) => (usaSu ? su[j] : 1 - su[j]);
+      const haciaPunta = eU.map((x) => (usaSu ? x : -x)); // del asta a la punta
+      const largo = (u1 - u0) * ampliar;
       comp.forEach((i, j) => {
-        let t = C.asta === 'proa' ? (haciaProa > 0 ? 1 - su[j] : su[j]) : (haciaProa > 0 ? su[j] : 1 - su[j]);
-        t = Math.max(0, Math.min(1, t));
+        const t = tDe(j);
+        if (ampliar !== 1) {
+          // agrandar desde el punto medio del asta
+          const base = P[i].map((x, c) => x - haciaPunta[c] * t * (u1 - u0) + eV[c] * ((v0 + v1) / 2 - pv[j]));
+          P[i] = P[i].map((x, c) => base[c] + (x - base[c]) * ampliar);
+        }
         attr.set(n.map((x) => x * t), i * 3);
+        asta.set([...haciaPunta.map((x) => x * t * largo), largo], i * 4);
+        // tela nueva: u del asta (0) a la punta (1), v de arriba (0) abajo (1)
+        if (uvs) uvs.set([t, 1 - sv[j]], i * 2);
       });
     } else {
       nVelas++;
@@ -252,17 +273,51 @@ for (const m of root.listMeshes()) for (const p of m.listPrimitives()) {
       // Velas de cuchillo (tela de proa a popa): del grátil (proa) a la baluma (popa). Velas cuadras: de la verga hacia abajo.
       const [x0, x1] = lim(pts.map((q) => q[0]));
       const cuchillo = Math.abs(dir[0]) < 0.6 && x1 - x0 > 0.35 * tam;
+      // _PLANO: lo que hay que mover cada punto para dejar la vela plana en el plano de sus bordes (sujetos a vergas
+      // y palos): sin viento la tela cuelga sin bolsa. Su cuarta coordenada (en _VELA) recorre la vela de lado a
+      // lado, para los pliegues verticales que hace la lona cuando cuelga.
+      // plano de la tela: el de menor varianza de sus puntos (más fiable que las normales en velas muy curvas)
+      const cc = media(pts), M = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+      for (const q of pts) for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) M[a][b] += (q[a] - cc[a]) * (q[b] - cc[b]);
+      const tr = M[0][0] + M[1][1] + M[2][2];
+      let np = n;
+      for (let it = 0; it < 60; it++) np = norm([0, 1, 2].map((a) => tr * np[a] - (M[a][0] * np[0] + M[a][1] * np[1] + M[a][2] * np[2])));
+      let bolsa = 0;
+      const alto = comp.map((i) => dot(P[i].map((x, c) => x - cb[c]), np));
+      const plana = alto.reduce((a, h) => Math.max(a, Math.abs(h)), 0) / tam > 0.3; // no es una vela sola: no se aplana
       comp.forEach((i, j) => {
         const w = cuchillo ? (x1 - P[i][0]) / Math.max(x1 - x0, 1e-6) : 1 - sv[j];
-        vela.set([w, sv[j], tam, 0], i * 4);
+        const h = plana ? 0 : alto[j];
+        plano.set(np.map((x) => -x * h), i * 3);
+        bolsa = Math.max(bolsa, Math.abs(h) / tam);
+        vela.set([w, sv[j], tam, su[j]], i * 4);
         muestrasVela.push({ p: P[i], dir, w, tam });
       });
+      bolsasVela.push(bolsa);
     }
   }
   const buf = root.listBuffers()[0];
   p.setAttribute(bandera ? '_ONDEO' : '_EMPUJE', doc.createAccessor().setType('VEC3').setArray(attr).setBuffer(buf));
   if (vela) p.setAttribute('_VELA', doc.createAccessor().setType('VEC4').setArray(vela).setBuffer(buf));
+  if (plano) p.setAttribute('_PLANO', doc.createAccessor().setType('VEC3').setArray(plano).setBuffer(buf));
+  if (asta) {
+    p.setAttribute('_ASTA', doc.createAccessor().setType('VEC4').setArray(asta).setBuffer(buf));
+    if (ampliar !== 1) p.getAttribute('POSITION').setArray(new Float32Array(P.flat()));
+    if (uvs) {
+      p.getAttribute('TEXCOORD_0').setArray(uvs);
+      // tela nueva de la bandera (scripts/bandera.py): rojigualda o cruz de Borgoña
+      const cual = C.banderasNuevas.cual[p.getMaterial().getName()];
+      const dirTmp = mkdtempSync(unirRuta(tmpdir(), 'bandera-')), sal = unirRuta(dirTmp, 'b.png');
+      const r = spawnSync('python3', ['-I', resolve(raiz, 'scripts/bandera.py'), cual, sal]);
+      if (r.status !== 0) throw new Error('no se pudo hacer la bandera: ' + r.stderr);
+      const mat = p.getMaterial().clone().setName('bandera_' + cual + '_' + nBanderas);
+      mat.setBaseColorTexture(doc.createTexture(cual).setImage(readFileSync(sal)).setMimeType('image/png'));
+      mat.setRoughnessFactor(0.85).setMetallicFactor(0);
+      p.setMaterial(mat);
+    }
+  }
 }
+if (bolsasVela.length) console.log('bolsa de las velas (fracción del tamaño):', bolsasVela.map((x) => x.toFixed(2)).join(' '));
 
 // ---- 4b) cabos: piezas largas y finas (análisis de componentes principales). Vibran con el viento, se destensan
 // un poco cuando para y, si tienen un extremo en una vela, siguen su movimiento (escotas, brazas, amuras).
@@ -289,12 +344,14 @@ function velaCercana(q, max) {
   return mejor;
 }
 let nCabos = 0, nEnganchados = 0;
+const radiosCabo = [];
+C.radioCabo ??= Infinity;
 for (const m of root.listMeshes()) for (const p of m.listPrimitives()) {
   if (esVela(p) || esBandera(p) || !p.getIndices()) continue;
   const pos = p.getAttribute('POSITION'), P = [], v = [];
   for (let i = 0; i < pos.getCount(); i++) P.push([...pos.getElement(i, v)]);
   const idx = Array.from(p.getIndices().getArray());
-  const cabo = new Float32Array(P.length * 4), sigue = new Float32Array(P.length * 4);
+  const cabo = new Float32Array(P.length * 4), sigue = new Float32Array(P.length * 4), colgar = new Float32Array(P.length * 3);
   let hay = false;
   for (const comp of componentes(P, idx)) {
     if (comp.length < 4) continue;
@@ -303,7 +360,13 @@ for (const m of root.listMeshes()) for (const p of m.listPrimitives()) {
     const t0 = pr.reduce((a, x) => Math.min(a, x), Infinity), t1 = pr.reduce((a, x) => Math.max(a, x), -Infinity), L = t1 - t0;
     let r = 0; pts.forEach((q, j) => { const d = q.map((x, k2) => x - c[k2] - e[k2] * pr[j]); r = Math.max(r, Math.hypot(...d)); });
     if (L < 0.35 || L / Math.max(r, 1e-3) < 18) continue;
+    radiosCabo.push(r);
+    // vergas y palos también son largos y finos, pero gruesos: no se doblan
+    if (r > C.radioCabo) continue;
     hay = true; nCabos++;
+    // _COLGAR: hacia dónde y cuánto cae el cabo en el medio cuando se afloja (catenaria): la gravedad perpendicular al
+    // cabo, por su largo; un obenque casi vertical apenas cae, una braza horizontal cae mucho
+    const g = norm([e[0] * e[1], -1 + e[1] * e[1], e[2] * e[1]]).map((x) => x * Math.sqrt(Math.max(0, 1 - e[1] * e[1])) * L);
     const lado = Math.abs(e[1]) < 0.95 ? norm(cruz(e, [0, 1, 0])) : [0, 0, 1];
     const fase = Math.random() * 6.283, amp = Math.min(1, L / 3);
     // ¿algún extremo toca una vela?
@@ -314,6 +377,7 @@ for (const m of root.listMeshes()) for (const p of m.listPrimitives()) {
     comp.forEach((i, j) => {
       const t = (pr[j] - t0) / L, w = Math.sin(Math.PI * t) * amp;
       cabo.set([lado[0] * w, lado[1] * w, lado[2] * w, fase], i * 4);
+      colgar.set(g.map((x) => x * Math.sin(Math.PI * t)), i * 3);
       if (enganche) {
         const [lad, s] = enganche, f = lad === 'B' ? t : 1 - t;
         sigue.set([s.dir[0] * s.tam * f, s.dir[1] * s.tam * f, s.dir[2] * s.tam * f, s.w], i * 4);
@@ -324,6 +388,11 @@ for (const m of root.listMeshes()) for (const p of m.listPrimitives()) {
   const buf = root.listBuffers()[0];
   p.setAttribute('_CABO', doc.createAccessor().setType('VEC4').setArray(cabo).setBuffer(buf));
   p.setAttribute('_SIGUE', doc.createAccessor().setType('VEC4').setArray(sigue).setBuffer(buf));
+  p.setAttribute('_COLGAR', doc.createAccessor().setType('VEC3').setArray(colgar).setBuffer(buf));
+}
+{
+  const q = radiosCabo.sort((a, b) => a - b), pc = (f) => q[Math.floor(f * (q.length - 1))]?.toFixed(3);
+  console.log(`grosor de piezas largas: p10 ${pc(0.1)} p50 ${pc(0.5)} p90 ${pc(0.9)} máx ${pc(1)}; límite de cabo ${C.radioCabo}`);
 }
 
 // ---- 5) materiales
@@ -343,6 +412,7 @@ if (C.textura) {
   const usos = new Map(); // textura -> materiales que la usan
   for (const m of root.listMaterials()) { const t = m.getBaseColorTexture(); if (t) { if (!usos.has(t)) usos.set(t, []); usos.get(t).push(m.getName()); } }
   for (const t of root.listTextures()) {
+    if ((usos.get(t) || []).every((n) => n.startsWith('bandera_'))) continue; // las banderas nuevas ya vienen hechas
     const ent = unirRuta(dirTmp, 'ent.img'), sal = unirRuta(dirTmp, 'sal.jpg');
     writeFileSync(ent, t.getImage());
     const mats = usos.get(t) || [];

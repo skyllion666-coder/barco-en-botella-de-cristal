@@ -113,6 +113,18 @@ Probado en móvil real (GitHub Pages): al pasar de horizontal a vertical el barc
   observador en miniatura junto al cristal con el sol bajo a su espalda, para que el arco quepa entero.
 - El barco reacciona más a las olas grandes (cabecea y escora más, se desliza por la cara de la ola) y cae agua por la borda con los golpes.
 
+### Ronda 3 (25-10-2026): velas, cabos y banderas de verdad
+- El usuario no veía moverse velas ni cuerdas: los desplazamientos eran de milésimas. Ahora se calcula todo respecto al tamaño de cada pieza:
+  - Velas (`_PLANO`: lo que separa cada punto del plano de sus bordes; `_VELA.w`: coordenada de lado a lado): sin viento cuelgan sin bolsa,
+    con pliegues verticales que se ahondan hacia el borde libre, el pujamen cae y se mecen; con poco viento flamean (ondas grandes del borde
+    sujeto al libre); llenas se tensan, la bolsa crece y respira con las rachas y solo tiembla la baluma.
+  - Cabos (`_COLGAR`: caída por gravedad perpendicular al cabo, por su largo): flojos hacen catenaria y se mecen; tensos vibran más deprisa y
+    más fuerte con el viento. Se separan de vergas y palos por el grosor (`radioCabo`): galeón 81 cabos, otomano 30.
+  - Banderas (`_ASTA`): sin viento caen junto al asta con pliegues; con viento se extienden y ondean (también arriba y abajo), sin inercia.
+- Banderas españolas (las del modelo eran de Paraguay, Egipto y otra tricolor): rojigualda con escudo sencillo en el mayor y cruz de
+  Borgoña (la de la Armada de los galeones) en trinquete y mesana; 1,7 veces más grandes. Las dibuja `scripts/bandera.py`.
+- `flotacion.js` cuenta con lo que se desplazan velas y banderas, a los dos lados, al vigilar el cristal.
+
 ### Sorpresas (no contárselas al usuario hasta que las vea)
 - Bioluminiscencia: de noche el agua agitada, la estela, las burbujas y las salpicaduras brillan en azul verdoso.
 - Estrellas fugaces de noche, cada 6-16 s, dentro de la botella.
@@ -120,6 +132,9 @@ Probado en móvil real (GitHub Pages): al pasar de horizontal a vertical el barc
 - Campanas de a bordo según la hora real (guardias de 4 h: cada media hora 1-8 toques por parejas), con sonido activado; tocar el barco
   hace sonar su campana.
 - Botellita con mensaje flotando en el agua (`botellita.js`): la llevan las olas y el viento; al tocarla se abre un pergamino con un dicho marinero.
+- Gaviotas (`gaviotas.js`): tres vuelan alrededor del barco con buen tiempo (aleteo y planeo en «M», se inclinan en los giros, graznan de
+  vez en cuando con sonido); con lluvia, tormenta, nieve o de noche bajan a posarse en el barco (sitios hallados con rayos: castillos,
+  vergas) y se mecen con él. La vuelta se encoge si la botella está de pie; nunca tocan el cristal (prueba: holgura mínima 1,0).
 
 ## Decisiones tomadas
 - Estilo: lo más realista posible (superar la foto de referencia).

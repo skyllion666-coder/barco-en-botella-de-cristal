@@ -19,17 +19,23 @@ function puntosExtremos(grupo, N = 160) {
   grupo.children.forEach((o) => {
     if (!o.isMesh) return;
     o.updateMatrix();
-    const at = o.geometry.attributes, emp = at._empuje || at._ondeo, vela = at._vela;
+    const at = o.geometry.attributes, emp = at._empuje || at._ondeo, vela = at._vela, asta = at._asta;
+    const p = new THREE.Vector3(), d = new THREE.Vector3();
     for (let i = 0; i < at.position.count; i++) {
-      v.fromBufferAttribute(at.position, i);
-      // velas y banderas del modelo: su desplazamiento máximo con viento fuerte (ver barcoModelo.js):
-      // hinchado (hasta 0,15 × _EMPUJE) más flameo del borde libre (hasta ~10 % del tamaño de la vela)
+      p.fromBufferAttribute(at.position, i);
+      // velas y banderas del modelo: hasta dónde llegan con el viento (ver barcoModelo.js), a un lado y a otro:
+      // velas: hinchado (hasta 0,12 × _EMPUJE) más flameo y pliegues del borde libre (hasta ~7 % del tamaño);
+      // banderas: ondeo de hasta ~18 % de su largo
       if (emp) {
-        const ex = emp.getX(i), ey = emp.getY(i), ez = emp.getZ(i), l = Math.hypot(ex, ey, ez) || 1;
-        const fl = vela ? 0.10 * vela.getZ(i) * (0.15 + 0.85 * vela.getX(i) ** 2) : 0.15 * l;
-        v.x += ex * 0.15 + ex / l * fl; v.y += ey * 0.15 + ey / l * fl; v.z += ez * 0.15 + ez / l * fl;
+        d.fromBufferAttribute(emp, i);
+        const l = d.length() || 1;
+        const fl = vela ? 0.07 * vela.getZ(i) * (0.15 + 0.85 * vela.getX(i) ** 2) : 0.18 * l * (asta ? asta.getW(i) : 1);
+        const hin = vela ? 0.12 : 0;
+        v.copy(p).addScaledVector(d, hin + fl / l).applyMatrix4(o.matrix); verts.push(v.x, v.y, v.z);
+        v.copy(p).addScaledVector(d, -fl / l).applyMatrix4(o.matrix); verts.push(v.x, v.y, v.z);
+        continue;
       }
-      v.applyMatrix4(o.matrix); verts.push(v.x, v.y, v.z);
+      v.copy(p).applyMatrix4(o.matrix); verts.push(v.x, v.y, v.z);
     }
   });
   const elegidos = new Set();
