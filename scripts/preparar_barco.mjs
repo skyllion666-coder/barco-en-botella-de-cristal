@@ -3,7 +3,10 @@
 //  - simplifica (con error acotado) solo las piezas pesadas, si el modelo lo necesita; velas, cabos y obenques intactos;
 //  - subdivide velas y banderas y calcula sus atributos de animación:
 //      _EMPUJE: dirección y cantidad de hinchado de cada vela (sigue la curvatura que ya tiene la vela);
+//      _VELA:   (w, altura, tamaño): w va del borde sujeto (0) al libre (1), por donde corren las ondas de flameo;
 //      _ONDEO:  dirección de ondeo de cada bandera, con longitud 0 en el asta y 1 en la punta libre;
+//      _CABO:   cabos (piezas largas y finas): dirección y amplitud de vibración (0 en los extremos) y fase;
+//      _SIGUE:  en los cabos enganchados a una vela, cuánto siguen su movimiento y en qué punto de ella (w);
 //  - une las piezas por material (menos llamadas de dibujo), ajusta texturas y comprime con meshopt;
 //  - guarda en extras la huella del casco en la flotación, la posición de los farolillos, el rumbo y el crédito.
 // Uso: node scripts/preparar_barco.mjs [galeon|ottoman]   (por defecto, galeon) -> assets/barco-<modelo>.glb
@@ -197,11 +200,13 @@ function ejesPlano(n) {
 }
 
 let nVelas = 0, nBanderas = 0;
+const muestrasVela = []; // vértices de vela (posición, dirección de hinchado, w, tamaño) para enganchar los cabos
 for (const m of root.listMeshes()) for (const p of m.listPrimitives()) {
   if (!esVela(p) && !esBandera(p)) continue;
   const bandera = esBandera(p);
   const { P, N, idx } = subdividirHasta(p, bandera ? 0.08 : 0.3);
   const attr = new Float32Array(P.length * 3);
+  const vela = bandera ? null : new Float32Array(P.length * 4);
   for (const comp of componentes(P, idx)) {
     const pts = comp.map((i) => P[i]);
     let n = norm(media(comp.map((i) => N[i])));
@@ -221,7 +226,8 @@ for (const m of root.listMeshes()) for (const p of m.listPrimitives()) {
       });
     } else {
       nVelas++;
-      const peso = comp.map((_, j) => Math.sin(Math.PI * su[j]) * Math.sin(Math.PI * sv[j]));
+      // mínimo en los bordes: así el sombreador conoce la dirección de la vela también ahí
+      const peso = comp.map((_, j) => Math.max(0.03, Math.sin(Math.PI * su[j]) * Math.sin(Math.PI * sv[j])));
       // sentido del hinchado: hacia donde ya está abombada la vela (centro respecto a los bordes)
       const bordes = comp.filter((_, j) => peso[j] < 0.15).map((i) => P[i]);
       const cb = bordes.length ? media(bordes) : media(pts);
@@ -230,9 +236,82 @@ for (const m of root.listMeshes()) for (const p of m.listPrimitives()) {
       const dir = s < 0 ? n.map((x) => -x) : n;
       const tam = Math.max(u1 - u0, v1 - v0);
       comp.forEach((i, j) => attr.set(dir.map((x) => x * peso[j] * tam), i * 3));
+      // w: de dónde a dónde corren las ondas de flameo (0 = borde sujeto, 1 = borde libre).
+      // Velas de cuchillo (tela de proa a popa): del grátil (proa) a la baluma (popa). Velas cuadras: de la verga hacia abajo.
+      const xs = pts.map((q) => q[0]), x0 = Math.min(...xs), x1 = Math.max(...xs);
+      const cuchillo = Math.abs(dir[0]) < 0.6 && x1 - x0 > 0.35 * tam;
+      comp.forEach((i, j) => {
+        const w = cuchillo ? (x1 - P[i][0]) / Math.max(x1 - x0, 1e-6) : 1 - sv[j];
+        vela.set([w, sv[j], tam, 0], i * 4);
+        muestrasVela.push({ p: P[i], dir, w, tam });
+      });
     }
   }
-  p.setAttribute(bandera ? '_ONDEO' : '_EMPUJE', doc.createAccessor().setType('VEC3').setArray(attr).setBuffer(root.listBuffers()[0]));
+  const buf = root.listBuffers()[0];
+  p.setAttribute(bandera ? '_ONDEO' : '_EMPUJE', doc.createAccessor().setType('VEC3').setArray(attr).setBuffer(buf));
+  if (vela) p.setAttribute('_VELA', doc.createAccessor().setType('VEC4').setArray(vela).setBuffer(buf));
+}
+
+// ---- 4b) cabos: piezas largas y finas (análisis de componentes principales). Vibran con el viento, se destensan
+// un poco cuando para y, si tienen un extremo en una vela, siguen su movimiento (escotas, brazas, amuras).
+function ejePrincipal(pts, c) {
+  const M = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  for (const q of pts) { const d = [q[0] - c[0], q[1] - c[1], q[2] - c[2]]; for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) M[a][b] += d[a] * d[b]; }
+  let e = [0.577, 0.577, 0.577];
+  for (let it = 0; it < 30; it++) e = norm([0, 1, 2].map((a) => M[a][0] * e[0] + M[a][1] * e[1] + M[a][2] * e[2]));
+  return e;
+}
+// rejilla para buscar el vértice de vela más cercano
+const CELDA = 0.5, rejilla = new Map();
+const claveR = (q) => q.map((x) => Math.floor(x / CELDA)).join(',');
+for (const s of muestrasVela) { const k2 = claveR(s.p); if (!rejilla.has(k2)) rejilla.set(k2, []); rejilla.get(k2).push(s); }
+function velaCercana(q, max) {
+  let mejor = null, dm = max;
+  const b = q.map((x) => Math.floor(x / CELDA));
+  for (let a = -1; a <= 1; a++) for (let c = -1; c <= 1; c++) for (let e = -1; e <= 1; e++) {
+    for (const s of rejilla.get([b[0] + a, b[1] + c, b[2] + e].join(',')) || []) {
+      const d = Math.hypot(s.p[0] - q[0], s.p[1] - q[1], s.p[2] - q[2]);
+      if (d < dm) { dm = d; mejor = s; }
+    }
+  }
+  return mejor;
+}
+let nCabos = 0, nEnganchados = 0;
+for (const m of root.listMeshes()) for (const p of m.listPrimitives()) {
+  if (esVela(p) || esBandera(p) || !p.getIndices()) continue;
+  const pos = p.getAttribute('POSITION'), P = [], v = [];
+  for (let i = 0; i < pos.getCount(); i++) P.push([...pos.getElement(i, v)]);
+  const idx = Array.from(p.getIndices().getArray());
+  const cabo = new Float32Array(P.length * 4), sigue = new Float32Array(P.length * 4);
+  let hay = false;
+  for (const comp of componentes(P, idx)) {
+    if (comp.length < 4) continue;
+    const pts = comp.map((i) => P[i]), c = media(pts), e = ejePrincipal(pts, c);
+    const pr = pts.map((q) => dot(q.map((x, k2) => x - c[k2]), e));
+    const t0 = Math.min(...pr), t1 = Math.max(...pr), L = t1 - t0;
+    let r = 0; pts.forEach((q, j) => { const d = q.map((x, k2) => x - c[k2] - e[k2] * pr[j]); r = Math.max(r, Math.hypot(...d)); });
+    if (L < 0.35 || L / Math.max(r, 1e-3) < 18) continue;
+    hay = true; nCabos++;
+    const lado = Math.abs(e[1]) < 0.95 ? norm(cruz(e, [0, 1, 0])) : [0, 0, 1];
+    const fase = Math.random() * 6.283, amp = Math.min(1, L / 3);
+    // ¿algún extremo toca una vela?
+    const extremo = (tt) => c.map((x, k2) => x + e[k2] * tt);
+    const sA = velaCercana(extremo(t0), 0.45), sB = velaCercana(extremo(t1), 0.45);
+    const enganche = sA && sB ? (Math.hypot(...sA.p.map((x, k2) => x - extremo(t0)[k2])) < Math.hypot(...sB.p.map((x, k2) => x - extremo(t1)[k2])) ? ['A', sA] : ['B', sB]) : sA ? ['A', sA] : sB ? ['B', sB] : null;
+    if (enganche) nEnganchados++;
+    comp.forEach((i, j) => {
+      const t = (pr[j] - t0) / L, w = Math.sin(Math.PI * t) * amp;
+      cabo.set([lado[0] * w, lado[1] * w, lado[2] * w, fase], i * 4);
+      if (enganche) {
+        const [lad, s] = enganche, f = lad === 'B' ? t : 1 - t;
+        sigue.set([s.dir[0] * s.tam * f, s.dir[1] * s.tam * f, s.dir[2] * s.tam * f, s.w], i * 4);
+      }
+    });
+  }
+  if (!hay) continue;
+  const buf = root.listBuffers()[0];
+  p.setAttribute('_CABO', doc.createAccessor().setType('VEC4').setArray(cabo).setBuffer(buf));
+  p.setAttribute('_SIGUE', doc.createAccessor().setType('VEC4').setArray(sigue).setBuffer(buf));
 }
 
 // ---- 5) materiales
@@ -264,6 +343,6 @@ doc.createExtension(EXTMeshoptCompression).setRequired(true).setEncoderOptions({
 escena.setExtras({ modelo: nombre, casco: { min: mn, max: mx }, total: getBounds(escena), farolillos, rumbo: C.rumbo, credito: C.credito });
 const salida = resolve(raiz, C.salida);
 await io.write(salida, doc);
-console.log(`web: ${Math.round(contar())} triángulos, ${root.listMeshes().length} mallas, ${nVelas} velas, ${nBanderas} banderas, ${(statSync(salida).size / 1024).toFixed(0)} KB`);
+console.log(`web: ${Math.round(contar())} triángulos, ${root.listMeshes().length} mallas, ${nVelas} velas, ${nBanderas} banderas, ${nCabos} cabos (${nEnganchados} enganchados a velas), ${(statSync(salida).size / 1024).toFixed(0)} KB`);
 console.log('huella del casco (x, y, z):', mn.map((x) => x.toFixed(2)).join(' '), '→', mx.map((x) => x.toFixed(2)).join(' '));
 console.log('total:', JSON.stringify(getBounds(escena), (k2, x) => (typeof x === 'number' ? +x.toFixed(2) : x)));

@@ -477,7 +477,7 @@ export function crearBarco() {
 
   return {
     grupo, info, matPopa,
-    actualizar(t, viento) { actualizarVelas(geoVelas, velas, t, viento); },
+    actualizar(t, viento) { actualizarVelas(geoVelas, velas, t, typeof viento === 'number' ? viento : Math.min(1.2, viento.total)); },
     farolillos(noche, t) {
       meshLuces.visible = noche > 0.05;
       matLuz.color.setRGB(1, 0.62, 0.28).multiplyScalar(7 * noche * (0.92 + 0.08 * Math.sin(t * 7.3)));

@@ -185,7 +185,8 @@ export function crearAudio() {
     return est.activo;
   };
 
-  function actualizar(p, sacudida, dt) {
+  // vientoAhora: el viento con rachas (viento.js); si no llega, el del clima
+  function actualizar(p, sacudida, dt, vientoAhora = p.viento) {
     if (!ctx || !est.activo) return;
     est.t += dt;
     const t = ctx.currentTime;
@@ -196,8 +197,10 @@ export function crearAudio() {
     nodos.mar.f.frequency.setTargetAtTime(280 + 700 * mar + 300 * oleaje, t, 0.3);
     sua(nodos.espuma, (0.015 + 0.16 * mar * mar) * (0.4 + 0.9 * oleaje));
     const rafaga = 0.6 + 0.4 * Math.sin(est.t * 0.37 + 1.3) * Math.sin(est.t * 0.91);
-    sua(nodos.viento, (0.04 + 0.42 * clamp(p.viento, 0, 1.2)) * rafaga * (0.6 + 0.4 * mar), 0.4);
-    nodos.viento.f.frequency.setTargetAtTime(260 + 520 * p.viento * rafaga, t, 0.4);
+    // el silbido sigue a las rachas: sube de volumen y de tono cuando sopla fuerte
+    const vv = clamp(vientoAhora, 0, 1.5);
+    sua(nodos.viento, (0.04 + 0.36 * vv) * (0.75 + 0.25 * rafaga) * (0.6 + 0.4 * mar), 0.25);
+    nodos.viento.f.frequency.setTargetAtTime(240 + 480 * vv * (0.8 + 0.2 * rafaga), t, 0.3);
     sua(nodos.lluvia, 0.22 * p.lluvia * p.lluvia);
     sua(nodos.lluviaSuave, 0.16 * p.lluvia);
     sua(nodos.borboteo, clamp(sacudida, 0, 1.2) * 0.32 * (0.6 + 0.4 * Math.sin(est.t * 23)), 0.08);

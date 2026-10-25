@@ -1,6 +1,7 @@
 // Regresión: girar el móvil de horizontal a vertical (con cambio de orientación de pantalla) y volver.
 // En cada paso comprueba que ningún vértice del barco atraviesa el cristal, que no da saltos y que cabe sin encogerse.
-// Uso: node scripts/prueba_giro.mjs [galeon|ottoman|procedural]   (sale con código 1 si falla)
+// Uso: node scripts/prueba_giro.mjs [galeon|ottoman|procedural] [clima]   (sale con código 1 si falla)
+// Con clima «tormenta» se lanza además una ola grande al empezar.
 import { createRequire } from 'node:module';
 const { chromium } = createRequire(import.meta.url)('/opt/node-tools/node_modules/playwright');
 
@@ -9,9 +10,9 @@ const p = await b.newPage({ viewport: { width: 640, height: 300 }, deviceScaleFa
 const errores = [];
 p.on('pageerror', (e) => errores.push(e.message));
 // t=1: modo captura, sin bucle de animación; la prueba avanza la simulación a mano.
-const barco = process.argv[2] || 'galeon';
-console.log('barco:', barco);
-await p.goto('file:///home/user/repo/docs/index.html?t=1&ui=0&dpr=0.25&barco=' + barco);
+const barco = process.argv[2] || 'galeon', clima = process.argv[3] || 'despejado';
+console.log('barco:', barco, '· clima:', clima);
+await p.goto(`file:///home/user/repo/docs/index.html?t=1&ui=0&dpr=0.25&barco=${barco}&clima=${clima}`);
 await p.waitForFunction('window.__listo === true', null, { timeout: 180000 });
 
 const r = await p.evaluate(() => {
@@ -64,6 +65,7 @@ const r = await p.evaluate(() => {
   }
   const girar = (cambio) => { window.__ang = cambio; window.dispatchEvent(new Event('orientationchange')); };
 
+  if (window.__api.clima.nombre === 'tormenta') window.__api.agua.lanzarOlaGrande(1);
   for (let i = 0; i < 90; i++) paso(0, 'reposo');
   // horizontal -> vertical; la pantalla rota a 70° (como hace Android, con algo de retraso)
   for (let phi = 0; phi <= 90; phi += 1.5) { if (phi >= 70 && window.__ang === 90) girar(0); paso(phi, 'ida'); }

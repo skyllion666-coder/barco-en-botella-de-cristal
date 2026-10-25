@@ -44,6 +44,9 @@ export function crearClima({ mundo, agua, barco, botella, camara, alRayo }) {
   const colAire = new THREE.Color();           // color de la atmósfera interior (nubes de tormenta, noche...)
   let nombre = 'despejado';
   let proximoRayo = 3, pulsos = [];
+  let rachas = null; // viento con rachas (viento.js), si se conecta
+  // arcoíris: aparece cuando escampa después de llover (durante ~30 s), si hay luz
+  const arco = { ultimaLluvia: -1e9, inicio: -1e9, mostrado: true };
   // objetivo efectivo: el ajuste elegido, modificado por la hora real si está activada
   const e = { ...p, tinte: new THREE.Color(1, 1, 1), colNiebla: new THREE.Color(0.7, 0.75, 0.8) };
   const hora = { real: false, fija: null };
@@ -114,12 +117,19 @@ export function crearClima({ mundo, agua, barco, botella, camara, alRayo }) {
     barco.matPopa.emissiveIntensity = 1.4 * p.noche + 0.25 * (1 - p.luz) * 0.5;
     barco.farolillos(p.noche, t);
 
-    prec.actualizar(t, { cantLluvia: p.lluvia, cantNieve: p.nieve, viento: p.viento, luz: luzFinal, aspecto });
-    cielo.actualizar(t, { rayo: p.rayo, noche: p.noche, cubierto: clamp(p.lluvia + p.nieve + p.niebla * 20, 0, 1), altoPx });
+    prec.actualizar(t, { cantLluvia: p.lluvia, cantNieve: p.nieve, viento: rachas ? Math.min(rachas.total, 1.4) : p.viento, luz: luzFinal, aspecto });
+    if (p.lluvia > 0.45) { arco.ultimaLluvia = t; arco.mostrado = false; }
+    if (!arco.mostrado && p.lluvia < 0.12 && t - arco.ultimaLluvia < 25) { arco.inicio = t; arco.mostrado = true; }
+    const ta = t - arco.inicio, DUR = 32;
+    const arcoiris = ta < 0 || ta > DUR ? 0 : clamp(ta / 4, 0, 1) * clamp((DUR - ta) / 8, 0, 1)
+      * clamp((p.luz - 0.45) / 0.35, 0, 1) * (1 - p.noche) * clamp(1 - p.lluvia * 4, 0, 1);
+    cielo.actualizar(t, { rayo: p.rayo, noche: p.noche, cubierto: clamp(p.lluvia + p.nieve + p.niebla * 20, 0, 1), altoPx, arcoiris });
   }
 
   // fuerza un relámpago en el instante t (capturas reproducibles con ?rayo=1)
   function forzarRayo(t) { pulsos = [[t, 1.0]]; cielo.disparar(); }
+  // fuerza el arcoíris (capturas con ?arcoiris=1): como si acabara de escampar
+  function forzarArcoiris(t) { arco.inicio = t; arco.mostrado = true; }
 
   function objetivoEfectivo() {
     for (const c of CANALES) e[c] = o[c];
@@ -143,8 +153,10 @@ export function crearClima({ mundo, agua, barco, botella, camara, alRayo }) {
   }
 
   return {
-    prec, cielo, p, o, luzFinal, colAire, qEnv, qInv, saltar, fijar, actualizar, forzarRayo,
-    ponerBarco: (b) => { barco = b; },
+    prec, cielo, p, o, luzFinal, colAire, qEnv, qInv, saltar, fijar, actualizar, forzarRayo, forzarArcoiris,
+    ponerBarco: (b) => { barco = b; }, conectarViento: (v) => { rachas = v; },
+    // de noche el agua agitada brilla (menos con lluvia, que la apaga)
+    get bioluminiscencia() { return clamp((p.noche - 0.3) / 0.6, 0, 1) * (1 - 0.5 * p.lluvia); },
     get nombre() { return nombre; }, ponerMar: (v) => { o.mar = v; }, ponerViento: (v) => { o.viento = v; },
     // día y noche según la hora local (fija: hora concreta para pruebas, p. ej. 21.5)
     get horaReal() { return hora.real; }, set horaReal(v) { hora.real = !!v; }, fijarHora: (h) => { hora.fija = h; },

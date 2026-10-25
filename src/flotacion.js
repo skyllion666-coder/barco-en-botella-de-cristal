@@ -19,11 +19,16 @@ function puntosExtremos(grupo, N = 160) {
   grupo.children.forEach((o) => {
     if (!o.isMesh) return;
     o.updateMatrix();
-    const pos = o.geometry.attributes.position, emp = o.geometry.attributes._empuje || o.geometry.attributes._ondeo;
-    for (let i = 0; i < pos.count; i++) {
-      v.fromBufferAttribute(pos, i);
-      // velas y banderas del modelo: se cuenta su desplazamiento máximo con viento fuerte (ver barcoModelo.js)
-      if (emp) v.x += emp.getX(i) * 0.14, v.y += emp.getY(i) * 0.14, v.z += emp.getZ(i) * 0.14;
+    const at = o.geometry.attributes, emp = at._empuje || at._ondeo, vela = at._vela;
+    for (let i = 0; i < at.position.count; i++) {
+      v.fromBufferAttribute(at.position, i);
+      // velas y banderas del modelo: su desplazamiento máximo con viento fuerte (ver barcoModelo.js):
+      // hinchado (hasta 0,15 × _EMPUJE) más flameo del borde libre (hasta ~10 % del tamaño de la vela)
+      if (emp) {
+        const ex = emp.getX(i), ey = emp.getY(i), ez = emp.getZ(i), l = Math.hypot(ex, ey, ez) || 1;
+        const fl = vela ? 0.10 * vela.getZ(i) * (0.15 + 0.85 * vela.getX(i) ** 2) : 0.15 * l;
+        v.x += ex * 0.15 + ex / l * fl; v.y += ey * 0.15 + ey / l * fl; v.z += ez * 0.15 + ez / l * fl;
+      }
       v.applyMatrix4(o.matrix); verts.push(v.x, v.y, v.z);
     }
   });
@@ -186,7 +191,7 @@ export function crearFlotacion({ barco, agua, botella }) {
     const hb = muestra(LX, 0), hs = muestra(-LX, 0), hp = muestra(0, -LZ), hst = muestra(0, LZ), hc = muestra(0, 0);
     const yObj = (hb + hs + hp + hst + 2 * hc) / 6 - 0.10 * K;
     const cabObj = Math.atan2(hb - hs, 2 * LX * K) * 0.75;
-    const balObj = Math.atan2(hp - hst, 2 * LZ * K) * 0.65 - 0.05 * viento;
+    const balObj = Math.atan2(hp - hst, 2 * LZ * K) * 0.65 - 0.075 * Math.min(viento, 1.5); // escora con el viento (y sus rachas)
     // resorte-amortiguador para dar inercia al cabeceo y al balanceo
     const w = 4.6, z = 0.55;
     est.vcab += ((cabObj - est.cab) * w * w - 2 * z * w * est.vcab) * dt; est.cab += est.vcab * dt;

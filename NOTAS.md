@@ -89,6 +89,24 @@ Probado en móvil real (GitHub Pages): al pasar de horizontal a vertical el barc
   Los dos van incrustados (`assets/barco-galeon.glb`, `assets/barco-ottoman.glb`): `docs/index.html` ~4,8 MB. `?barco=galeon|ottoman|procedural` fuerza uno.
 - `npm run prueba:giro` prueba los dos barcos.
 
+### Viento, velas, cuerdas y olas de tormenta (25-10-2026)
+- `viento.js`: un solo viento para todo (clima + rachas + remolino + balanceo y sacudidas del móvil). Lo usan velas, banderas, cabos,
+  escora, inclinación de la lluvia, cabrilleo del agua y el silbido del sonido.
+- `preparar_barco.mjs` añade `_VELA` (posición en la vela), `_CABO` (cabos detectados por componentes principales: galeón 174, otomano 40)
+  y `_SIGUE` (cabos enganchados a una vela: galeón 71, otomano 26). `barcoModelo.js`: un sombreador común anima velas (llenado con inercia,
+  ondas del borde sujeto al libre, gualdrapeo sin viento, pliegues con luz), banderas y cabos (vibran, cuelgan sin viento, siguen a su vela).
+- Oleaje (`agua.js`): 18 ondas con espectro de mar real (amplitudes, longitudes, direcciones y desfases distintos, semilla fija),
+  series de olas a la velocidad de grupo y una ola grande cada 20-50 s con mar fuerte. GLSL y `oleajeJS` idénticos (la flotación los usa).
+  Espuma solo en crestas altas y empinadas; cabrilleo con el viento. `scripts/prueba_olas.mjs`: variación 0,41 → 0,71, mayor ola 3,6 × la media.
+- Salpicaduras (`salpicaduras.js`) desde las crestas que rompen y desde la proa al golpear las olas.
+- Gotas en el cristal: más lentas (≤ 1,1 u/s, a tirones) y estelas más cortas: antes dejaban rayas largas al moverse.
+- Prueba de giro también en tormenta con ola grande (`npm run prueba:giro`): los dos barcos, sin tocar el cristal.
+
+### Sorpresas (no contárselas al usuario hasta que las vea)
+- Bioluminiscencia: de noche el agua agitada, la estela, las burbujas y las salpicaduras brillan en azul verdoso.
+- Estrellas fugaces de noche, cada 6-16 s, dentro de la botella.
+- Arcoíris dentro de la botella al escampar tras lluvia o tormenta (~30 s, solo de día).
+
 ## Decisiones tomadas
 - Estilo: lo más realista posible (superar la foto de referencia).
 - El barco es procedural porque el entorno de desarrollo no puede descargar de Poly Pizza, Sketchfab ni Poly Haven (red restringida).
@@ -104,7 +122,7 @@ Probado en móvil real (GitHub Pages): al pasar de horizontal a vertical el barc
 - `src/` código fuente (módulos ES), `scripts/build.mjs` empaqueta todo en `docs/index.html` (un solo archivo).
 - `scripts/prueba_giro.mjs` prueba de regresión del barco al girar (`npm run prueba:giro`).
 - `scripts/shot.mjs` captura reproducible (`node scripts/shot.mjs salida.png 1600 740 "t=4&ui=0&clima=lluvia&roll=15"`).
-- Parámetros de URL: `t` (modo captura), `rayo=1` (relámpago en la captura), `clima`, `mar`, `viento`, `roll`, `pitch`, `dpr`, `ui=0`, `dbg`.
+- Parámetros de URL: `t` (modo captura), `rayo=1` (relámpago en la captura), `ola=1` (ola grande), `arcoiris=1`, `fugaz=1` (estrella fugaz), `clima`, `mar`, `viento`, `roll`, `pitch`, `dpr`, `ui=0`, `dbg`.
 
 ## Reglas
 - Todo el texto de la app y la conversación, en español.

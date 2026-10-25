@@ -101,13 +101,14 @@ export function crearGotas({ renderer, agua, botella }) {
       const gTan = Math.hypot(gEje, gCont);
       // adherencia: las gotas pequeñas se quedan pegadas; las grandes resbalan
       const empuje = gTan * d.r * 9 - d.pega;
-      const v = empuje > 0 ? empuje * 2.2 : 0;
+      // velocidad de una gota real sobre vidrio: despacio, a tirones, como mucho ~1 unidad/s
+      const v = empuje > 0 ? Math.min(1.1, empuje * 0.55) * (0.6 + 0.4 * Math.sin(d.vida * 7 + d.x * 3)) : 0;
       d.vx += ((gTan > 1e-4 ? gEje / gTan * v : 0) - d.vx) * Math.min(1, dt * 6);
       d.va += ((gTan > 1e-4 ? gCont / gTan * v : 0) - d.va) * Math.min(1, dt * 6);
       d.x += d.vx * dt;
       d.a += d.va * dt / Math.max(botella.rIn(d.x), 0.5);
       // al resbalar crecen un poco (recogen otras gotitas) y pierden adherencia
-      if (v > 0) { d.r = Math.min(0.24, d.r + dt * 0.01); d.pega = Math.max(0.15, d.pega - dt * 0.05); }
+      if (v > 0) { d.r = Math.min(0.19, d.r + dt * 0.006); d.pega = Math.max(0.2, d.pega - dt * 0.03); }
       d.vida -= dt * (lluvia > 0.05 ? 0.4 : 1);
       // en el "techo" se descuelgan; bajo el agua se funden con ella; fuera del cuerpo, se van
       const cae = gDentro < -0.55 && d.r > 0.11 && Math.random() < dt * 0.8;
@@ -137,7 +138,7 @@ export function crearGotas({ renderer, agua, botella }) {
     const prevAuto = renderer.autoClear;
     renderer.autoClear = false;
     matDesv.uniforms.tPrev.value = rt[actual].texture;
-    matDesv.uniforms.uK.value = Math.exp(-dt / 1.6);
+    matDesv.uniforms.uK.value = Math.exp(-dt / 0.7); // la estela se seca en menos de un segundo
     renderer.setRenderTarget(rt[1 - actual]);
     renderer.render(escDesv, camPant);
     if (n) renderer.render(escGotas, camara);

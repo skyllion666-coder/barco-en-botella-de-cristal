@@ -17,6 +17,8 @@ import { crearUI } from './ui.js';
 import { crearReflejo } from './reflejo.js';
 import { crearAudio } from './audio.js';
 import { crearGotas } from './gotas.js';
+import { crearViento } from './viento.js';
+import { crearSalpicaduras } from './salpicaduras.js';
 
 const params = new URLSearchParams(location.search);
 const num = (k, d) => (params.has(k) ? parseFloat(params.get(k)) : d);
@@ -57,6 +59,9 @@ const vidrio = crearVidrio(U, botella.exterior);
 const agua = crearAgua({ renderer: canal.renderer, botella, texRuido: ruido, cubo, relleno: num('relleno', 0.30) });
 let flotacion = crearFlotacion({ barco, agua, botella });
 const gotas = crearGotas({ renderer: canal.renderer, agua, botella });
+const viento = crearViento();
+const salpicaduras = crearSalpicaduras({ escena: mundo.interior.escena, agua, botella });
+const proaBarco = new THREE.Vector3();
 let reflejo = crearReflejo({ interior: mundo.interior, barco, renderer: canal.renderer });
 
 const camara = new THREE.PerspectiveCamera(20, 2, 5, 220);
@@ -89,6 +94,7 @@ function redimensionar() {
   canal.redimensionar(w, h, dprActual());
   U.uRes.value.set(canal.ancho, canal.alto);
   ajustarCamara(w / h);
+  salpicaduras?.escala(canal.alto);
 }
 addEventListener('resize', redimensionar);
 redimensionar();
@@ -110,7 +116,9 @@ if (params.has('clima')) clima.fijar(params.get('clima'));
 if (params.has('hora')) clima.fijarHora(num('hora', 12));
 if (params.has('mar')) clima.ponerMar(num('mar', 0.5));
 if (params.has('viento')) clima.ponerViento(num('viento', 0.75));
+clima.conectarViento(viento);
 if (modoCaptura) clima.saltar();
+// ?ola=1: en la captura, una ola grande cruzando el centro de la botella
 
 // Cambia de barco al momento: se monta en la botella y se rehacen su flotación y su reflejo.
 let ui = null;
@@ -166,10 +174,17 @@ function avanzar(dt, t) {
   agua.simular(dt, t, impulsos);
 
   clima.actualizar(dt, t, sensores.g, camara.aspect, canal.alto);
-  audio.actualizar(clima.p, sensores.sacudida, dt);
-  flotacion.actualizar(dt, t, clima.p.viento);
+  audio.actualizar(clima.p, sensores.sacudida, dt, viento.total);
+  viento.actualizar(dt, { base: clima.p.viento, sacudida: sensores.sacudida, balanceo: flotacion.estado.vbal });
+  agua.ponerViento(viento.total, viento.estado.dir);
+  flotacion.actualizar(dt, t, viento.total);
   gotas.actualizar(dt, { lluvia: clima.p.lluvia, g: sensores.g });
-  barco.actualizar(t, clima.p.viento);
+  barco.actualizar(t, viento.estado);
+  // salpicaduras de las crestas que rompen y de la proa al golpear las olas
+  proaBarco.set((barco.info?.eslora ?? 8.4) * 0.5, 0.25, 0).applyMatrix4(barco.grupo.matrix);
+  salpicaduras.actualizar(dt, t, { viento: viento.total, barco: { vcab: flotacion.estado.vcab, proa: proaBarco } });
+  salpicaduras.color(clima.luzFinal, clima.bioluminiscencia);
+  agua.ponerBioluminiscencia(clima.bioluminiscencia);
 }
 
 function dibujar(t, dt = 1 / 60) {
@@ -217,6 +232,9 @@ if (modoCaptura) {
   const T = num('t', 1), pasos = Math.max(1, Math.round(T * 30));
   for (let i = 0; i <= pasos; i++) {
     if (params.has('rayo') && i === pasos) clima.forzarRayo(i / 30 - 0.02);
+    if (params.has('arcoiris') && i === Math.max(0, pasos - 300)) clima.forzarArcoiris(i / 30);
+    if (params.has('fugaz') && i === pasos - 10) clima.cielo.lanzarFugaz();
+    if (params.has('ola') && i === Math.max(0, pasos - 255)) agua.lanzarOlaGrande(i / 30); // llega al centro al final
     avanzar(1 / 30, i / 30);
   }
   dibujar(T);
@@ -227,6 +245,6 @@ if (modoCaptura) {
   window.__listo = true;
 }
 window.__api = {
-  clima, sensores, agua, calidad, redibujar: () => dibujar(tTotal), camara, canal, avanzar, botella, audio, gotas, cambiarBarco,
+  clima, sensores, agua, calidad, redibujar: (dt) => dibujar(tTotal, dt), camara, canal, avanzar, botella, audio, gotas, cambiarBarco, viento, salpicaduras,
   get flotacion() { return flotacion; }, get barco() { return barco; },
 };
