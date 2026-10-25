@@ -19,8 +19,13 @@ function puntosExtremos(grupo, N = 160) {
   grupo.children.forEach((o) => {
     if (!o.isMesh) return;
     o.updateMatrix();
-    const pos = o.geometry.attributes.position;
-    for (let i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i).applyMatrix4(o.matrix); verts.push(v.x, v.y, v.z); }
+    const pos = o.geometry.attributes.position, emp = o.geometry.attributes._empuje;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i);
+      // velas del modelo: se cuenta su hinchado máximo con viento fuerte (ver barcoModelo.js)
+      if (emp) v.x += emp.getX(i) * 0.14, v.y += emp.getY(i) * 0.14, v.z += emp.getZ(i) * 0.14;
+      v.applyMatrix4(o.matrix); verts.push(v.x, v.y, v.z);
+    }
   });
   const elegidos = new Set();
   for (let k = 0; k < N; k++) {
@@ -39,9 +44,13 @@ function puntosExtremos(grupo, N = 160) {
 
 export function crearFlotacion({ barco, agua, botella }) {
   const f = agua.estado;
-  const YAW = -0.62;
+  const YAW = barco.info?.rumbo ?? -0.62; // rumbo de reposo respecto al eje de la botella
   const est = { u: -4, v: 0, cab: 0, bal: 0, vcab: 0, vbal: 0, y: 0, apoyo: 0, escora: 0, escala: 1 };
   const extremos = puntosExtremos(barco.grupo);
+  // medidas del casco (las del barco procedural por defecto): muestreo de olas, margen y huella de espuma
+  const I = barco.info || {};
+  const ESL = I.eslora ?? 8.4, MAN = I.manga ?? 1.7, PROA = I.proa ?? 6.25;
+  const LX = ESL * 0.345, LZ = MAN * 0.44;
   const NE = extremos.length / 3;
   const M = new THREE.Matrix4(), Rz = new THREE.Matrix4(), Rx = new THREE.Matrix4();
   const fwd = new THREE.Vector3(), zz = new THREE.Vector3(), pos = new THREE.Vector3(), P = new THREE.Vector3();
@@ -154,7 +163,7 @@ export function crearFlotacion({ barco, agua, botella }) {
     // posición deseada: 40% del tramo de agua (algo a la izquierda del centro, como en la foto)
     seccion();
     if (sec.ok) {
-      const margen = 4.4 * ESCALA_BARCO, ancho = sec.hi - sec.lo;
+      const margen = 0.7 * PROA * ESCALA_BARCO, ancho = sec.hi - sec.lo;
       const objU = ancho > 2 * margen ? clamp(sec.lo + ancho * 0.40 + Math.sin(t * 0.21) * 0.5, sec.lo + margen, sec.hi - margen) : (sec.lo + sec.hi) / 2;
       const objV = sec.cv + Math.sin(t * 0.17 + 1.0) * 0.25;
       let du = (objU - u) * Math.min(1, dt * 2.2), dv = (objV - v) * Math.min(1, dt * 1.6);
@@ -174,10 +183,10 @@ export function crearFlotacion({ barco, agua, botella }) {
     // olas bajo el casco
     const K = ESCALA_BARCO;
     const muestra = (lx, lz) => agua.alturaEn(u + (lx * cy + lz * sy) * K, v + (lx * sy - lz * cy) * K, t);
-    const hb = muestra(2.9, 0), hs = muestra(-2.9, 0), hp = muestra(0, -0.75), hst = muestra(0, 0.75), hc = muestra(0, 0);
+    const hb = muestra(LX, 0), hs = muestra(-LX, 0), hp = muestra(0, -LZ), hst = muestra(0, LZ), hc = muestra(0, 0);
     const yObj = (hb + hs + hp + hst + 2 * hc) / 6 - 0.10 * K;
-    const cabObj = Math.atan2(hb - hs, 5.8 * K) * 0.75;
-    const balObj = Math.atan2(hp - hst, 1.5 * K) * 0.65 - 0.05 * viento;
+    const cabObj = Math.atan2(hb - hs, 2 * LX * K) * 0.75;
+    const balObj = Math.atan2(hp - hst, 2 * LZ * K) * 0.65 - 0.05 * viento;
     // resorte-amortiguador para dar inercia al cabeceo y al balanceo
     const w = 4.6, z = 0.55;
     est.vcab += ((cabObj - est.cab) * w * w - 2 * z * w * est.vcab) * dt; est.cab += est.vcab * dt;
@@ -195,7 +204,8 @@ export function crearFlotacion({ barco, agua, botella }) {
 
     componer(M, est.u, est.v, est.y, cy, sy, est.cab + est.apoyo, est.bal + est.escora, Math.max(est.escala, 1e-3));
     agua.uCasco.value.set(est.u, est.v, cy, sy);
-    agua.uEscCasco.value = ESCALA_BARCO * Math.max(est.escala, 0.05);
+    const e = ESCALA_BARCO * Math.max(est.escala, 0.05);
+    agua.uEscCasco.value.set(e * ESL / 8.4, e * MAN / 1.7); // la huella de espuma está hecha para el casco procedural
     barco.grupo.visible = est.escala > 0.05;
     barco.grupo.matrixAutoUpdate = false;
     barco.grupo.matrix.copy(M);

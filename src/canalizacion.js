@@ -148,12 +148,14 @@ export class Canalizacion {
     }
   }
 
-  // etapas: { mundo, camara, vidrio, aguaPasada? }
-  dibujar({ mundo, camara, vidrio, aguaPasada, reflejoPasada, tiempo }) {
+  // etapas: { mundo, interior?, camara, vidrio, aguaPasada? }. El interior (barco, lluvia, rayos) se dibuja
+  // encima de la habitación en el mismo destino, compartiendo profundidad, pero con sus propias luces.
+  dibujar({ mundo, interior, camara, vidrio, aguaPasada, reflejoPasada, tiempo }) {
     const r = this.renderer;
     r.setRenderTarget(this.rtEscena);
     r.clear();
     r.render(mundo, camara);
+    if (interior) { r.autoClear = false; r.render(interior, camara); r.autoClear = true; }
 
     let origen = this.rtEscena;
     if (reflejoPasada) reflejoPasada(this.rtRefl);

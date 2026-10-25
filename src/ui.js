@@ -1,5 +1,7 @@
-// Interfaz en español: selector de clima, mar/viento, sensores, pantalla completa. Se oculta sola.
+// Interfaz en español: selector de clima, mar/viento, sensores, sonido, vibración, hora real, pantalla completa
+// y rendimiento (FPS). Se oculta sola.
 import { AJUSTES } from './clima.js';
+import { CREDITO_BARCO } from './barcoModelo.js';
 
 const CSS = `
 #ui { position: fixed; inset: 0; pointer-events: none; font: 500 14px/1.2 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: #f4ece2; -webkit-user-select: none; user-select: none; }
@@ -41,7 +43,7 @@ function el(tag, attrs = {}, hijos = []) {
   return e;
 }
 
-export function crearUI({ clima, sensores, audio, alAjustarCalidad, estadoCalidad }) {
+export function crearUI({ clima, sensores, audio, alAjustarCalidad, estadoCalidad, opciones = {}, rendimiento }) {
   const estilo = el('style'); estilo.textContent = CSS; document.head.append(estilo);
   const raiz = el('div', { id: 'ui' });
   document.body.append(raiz);
@@ -72,17 +74,23 @@ export function crearUI({ clima, sensores, audio, alAjustarCalidad, estadoCalida
     } catch (_) { /* sin soporte */ }
   } });
   const bCalidad = el('button', { class: 'btn', type: 'button', texto: 'Calidad: auto', onclick: () => { alAjustarCalidad?.(); sincronizar(); guardar(); } });
+  const bVibrar = el('button', { class: 'btn', type: 'button', texto: 'Vibración: sí', onclick: () => { opciones.vibrar = !opciones.vibrar; if (opciones.vibrar) try { navigator.vibrate?.(40); } catch (_) { /* nada */ } sincronizar(); guardar(); } });
+  const bHora = el('button', { class: 'btn', type: 'button', texto: 'Hora real: no', onclick: () => { clima.horaReal = !clima.horaReal; sincronizar(); guardar(); } });
+  const estadoRend = el('div', { class: 'nota', texto: '' });
   const nota = el('div', { class: 'nota', texto: 'Inclina o sacude el móvil para mover el mar. En el ordenador, arrastra con el ratón o usa las flechas. El sonido se activa con el altavoz.' });
   const notaSensor = el('div', { class: 'nota', texto: '' });
   notaSensor.style.display = 'none';
   const estadoSensor = el('div', { class: 'nota', texto: 'Giroscopio: sin datos' });
+  const credito = el('div', { class: 'nota', texto: 'Barco: ' + CREDITO_BARCO });
   const panel = el('div', { id: 'panel', class: 'ui-vidrio' }, [
+    estadoRend,
     el('div', {}, [el('label', {}, [el('span', { texto: 'Mar' }), el('span', { texto: 'calma ↔ tempestad' })]), sMar]),
     el('div', {}, [el('label', {}, [el('span', { texto: 'Viento' }), el('span', { texto: 'en las velas' })]), sViento]),
     el('div', { class: 'fila' }, [bNivelar, bSensores]),
     el('div', { class: 'fila' }, [bSonido, bPantalla]),
-    el('div', { class: 'fila' }, [bCalidad]),
-    estadoSensor, nota, notaSensor,
+    el('div', { class: 'fila' }, [bCalidad, bHora]),
+    el('div', { class: 'fila' }, [bVibrar]),
+    estadoSensor, nota, notaSensor, credito,
   ]);
   const engranaje = el('button', { id: 'engranaje', class: 'ui-vidrio', type: 'button', 'aria-label': 'Ajustes', texto: '⚙️', onclick: () => { panel.classList.toggle('abierto'); recordar(); } });
   const sonido = el('button', { id: 'sonido', class: 'ui-vidrio', type: 'button', 'aria-label': 'Sonido', texto: '🔇', onclick: () => { if (!audio) return; audio.alternar(); sincronizar(); recordar(); } });
@@ -126,12 +134,20 @@ export function crearUI({ clima, sensores, audio, alAjustarCalidad, estadoCalida
     bSensores.textContent = sensores.permiso === 'denegado' ? 'Permiso denegado' : 'Activar sensores';
     if (audio) { bSonido.textContent = 'Sonido: ' + (audio.activo ? 'sí' : 'no'); bSonido.classList.toggle('on', audio.activo); sonido.textContent = audio.activo ? '🔊' : '🔇'; }
     if (estadoCalidad) bCalidad.textContent = 'Calidad: ' + estadoCalidad();
+    bVibrar.textContent = 'Vibración: ' + (opciones.vibrar ? 'sí' : 'no'); bVibrar.classList.toggle('on', !!opciones.vibrar);
+    bVibrar.style.display = navigator.vibrate ? '' : 'none';
+    bHora.textContent = 'Hora real: ' + (clima.horaReal ? 'sí' : 'no'); bHora.classList.toggle('on', clima.horaReal);
+    if (rendimiento) {
+      const r = rendimiento();
+      estadoRend.textContent = `Rendimiento: ${r.fps || '—'} FPS · resolución ${r.resolucion} %`;
+      estadoRend.style.color = !r.fps ? '' : r.fps >= 50 ? '#a8e6a1' : r.fps >= 30 ? '#f0d9a0' : '#f0b9a0';
+    }
   }
 
   // --- persistencia sencilla
   function guardar() {
     try {
-      localStorage.setItem('barco-botella-v2', JSON.stringify({ clima: clima.nombre, manual, mar: clima.o.mar, viento: clima.o.viento }));
+      localStorage.setItem('barco-botella-v2', JSON.stringify({ clima: clima.nombre, manual, mar: clima.o.mar, viento: clima.o.viento, vibrar: opciones.vibrar, horaReal: clima.horaReal }));
     } catch (_) { /* sin almacenamiento */ }
   }
   function restaurar() {
@@ -141,6 +157,8 @@ export function crearUI({ clima, sensores, audio, alAjustarCalidad, estadoCalida
       if (AJUSTES[d.clima]) clima.fijar(d.clima);
       if (d.manual && typeof d.mar === 'number') { manual = true; clima.ponerMar(d.mar); }
       if (d.manual && typeof d.viento === 'number') clima.ponerViento(d.viento);
+      if (typeof d.vibrar === 'boolean') opciones.vibrar = d.vibrar;
+      if (typeof d.horaReal === 'boolean') clima.horaReal = d.horaReal;
     } catch (_) { /* ignorar */ }
   }
   restaurar();

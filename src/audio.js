@@ -1,4 +1,4 @@
-// Sonido ambiente procedural (WebAudio, sin archivos): mar, oleaje, viento, lluvia, truenos,
+// Sonido ambiente procedural (WebAudio, sin archivos): mar, oleaje, viento, lluvia, truenos (audibles en el móvil),
 // crujidos del casco y borboteo al agitar. Solo arranca tras un gesto del usuario.
 import { clamp } from './util.js';
 
@@ -15,6 +15,94 @@ function bufferRuido(ctx, segundos, tipo) {
   const f = Math.floor(ctx.sampleRate * 0.05);
   for (let i = 0; i < f; i++) { const k = i / f; d[n - 1 - i] = d[n - 1 - i] * k + d[i] * (1 - k); }
   return b;
+}
+
+function normalizar(buf, pico = 0.9) {
+  const d = buf.getChannelData(0);
+  let m = 0;
+  for (let i = 0; i < d.length; i++) m = Math.max(m, Math.abs(d[i]));
+  if (m > 0) for (let i = 0; i < d.length; i++) d[i] *= pico / m;
+  return buf;
+}
+
+// Saturación suave: genera armónicos del retumbo grave para que se oiga en altavoces que no dan graves.
+function curvaSaturacion(drive) {
+  const n = 1024, c = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const x = (i / (n - 1)) * 2 - 1; c[i] = Math.tanh(x * drive) / Math.tanh(drive); }
+  return c;
+}
+
+const buffersTrueno = new WeakMap();
+
+// Trueno procedural. 'cerca' (0..1) sale del retraso entre relámpago y trueno: cerca suena antes, más fuerte,
+// con chasquido y más brillo; lejos, más grave, suave y largo. Capas: chasquido de ruido blanco en banda media-alta,
+// retumbo de ruido marrón saturado (armónicos audibles en el móvil), varios "rodamientos" que llegan con retraso
+// y un fondo subgrave para auriculares o altavoces buenos.
+export function sintetizarTrueno(ctx, destino, t0, cerca = 0.5) {
+  let bufs = buffersTrueno.get(ctx);
+  if (!bufs) {
+    bufs = { marron: normalizar(bufferRuido(ctx, 7, 'marron')), blanco: normalizar(bufferRuido(ctx, 1.5, 'blanco'), 0.7) };
+    buffersTrueno.set(ctx, bufs);
+  }
+  const dur = 3.6 + 2.6 * (1 - cerca);
+  const al = (a, b) => a + Math.random() * (b - a);
+  const salida = ctx.createGain(); salida.gain.value = 1;
+  if (ctx.createStereoPanner) {
+    const pan = ctx.createStereoPanner(); pan.pan.value = al(-0.6, 0.6);
+    salida.connect(pan); pan.connect(destino);
+  } else salida.connect(destino);
+  const fin = t0 + dur + 0.3;
+
+  // 1) chasquido inicial (solo si cae cerca): ruido en 1,5-5 kHz con crepitar irregular
+  if (cerca > 0.25) {
+    const s = ctx.createBufferSource(); s.buffer = bufs.blanco;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = al(2200, 3200); bp.Q.value = 0.6;
+    const g = ctx.createGain(); const a = 0.75 * cerca;
+    g.gain.setValueAtTime(0, t0);
+    let t = t0;
+    for (let i = 0; i < 14; i++) { t += al(0.008, 0.03); g.gain.setValueAtTime(a * al(0.25, 1) * Math.exp(-(t - t0) * 7), t); }
+    g.gain.setTargetAtTime(0, t, 0.06);
+    s.connect(bp); bp.connect(g); g.connect(salida);
+    s.start(t0, al(0, 0.4)); s.stop(t0 + 0.9);
+  }
+
+  // 2) retumbo audible: marrón -> paso bajo que se oscurece -> saturación -> banda 120-2000 Hz
+  const s = ctx.createBufferSource(); s.buffer = bufs.marron; s.playbackRate.value = al(0.85, 1.15);
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.5;
+  lp.frequency.setValueAtTime(900 + 1600 * cerca, t0);
+  lp.frequency.exponentialRampToValueAtTime(260 + 200 * cerca, t0 + dur);
+  const pre = ctx.createGain(); pre.gain.value = 2.2;
+  const sat = ctx.createWaveShaper(); sat.curve = curvaSaturacion(2.5); sat.oversample = '2x';
+  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 120;
+  const pico = ctx.createBiquadFilter(); pico.type = 'peaking'; pico.frequency.value = 420; pico.Q.value = 0.8; pico.gain.value = 5;
+  const g = ctx.createGain();
+  // envolvente: ataque (más lento si lejos) y varios rodamientos que se superponen
+  const ataque = 0.03 + 0.25 * (1 - cerca);
+  const nivel = 0.55 + 0.45 * cerca;
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(nivel, t0 + ataque);
+  let t = t0 + ataque;
+  const rodamientos = 3 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < rodamientos; i++) {
+    const caida = (i + 1) / (rodamientos + 1);
+    t += al(0.35, 0.9) * (dur / 4.5);
+    g.gain.setTargetAtTime(nivel * al(0.25, 0.45) * (1 - caida * 0.5), t - 0.25, 0.12);
+    g.gain.setTargetAtTime(nivel * al(0.55, 0.9) * (1 - caida * 0.6), t, 0.08);
+  }
+  g.gain.setTargetAtTime(0, Math.min(t + 0.2, t0 + dur - 0.6), dur * 0.16);
+  s.connect(lp); lp.connect(pre); pre.connect(sat); sat.connect(hp); hp.connect(pico); pico.connect(g); g.connect(salida);
+  const off = al(0, 2);
+  s.start(t0, off); s.stop(fin);
+
+  // 3) fondo subgrave (lo que da cuerpo con auriculares; el móvil apenas lo reproduce)
+  const sb = ctx.createBufferSource(); sb.buffer = bufs.marron;
+  const lps = ctx.createBiquadFilter(); lps.type = 'lowpass'; lps.frequency.value = 110;
+  const gs = ctx.createGain();
+  gs.gain.setValueAtTime(0, t0); gs.gain.linearRampToValueAtTime(0.7 * nivel, t0 + ataque + 0.1);
+  gs.gain.setTargetAtTime(0, t0 + dur * 0.45, dur * 0.2);
+  sb.connect(lps); lps.connect(gs); gs.connect(salida);
+  sb.start(t0, (off + 3) % 6); sb.stop(fin);
+  return dur;
 }
 
 export function crearAudio() {
@@ -43,8 +131,10 @@ export function crearAudio() {
     maestro.connect(global); global.connect(comp); comp.connect(ctx.destination);
 
     const marron = bufferRuido(ctx, 5, 'marron'), blanco = bufferRuido(ctx, 4, 'blanco');
+    const ambiente = ctx.createGain(); ambiente.gain.value = 1;
+    ambiente.connect(maestro);
     nodos = {
-      global,
+      global, ambiente,
       mar: fuente(marron, 'lowpass', 520),
       espuma: fuente(blanco, 'bandpass', 2400, 0.6),
       viento: fuente(marron, 'bandpass', 420, 1.1),
@@ -52,7 +142,7 @@ export function crearAudio() {
       lluviaSuave: fuente(blanco, 'lowpass', 9000, 0.5),
       borboteo: fuente(blanco, 'bandpass', 520, 3.5),
     };
-    for (const k of ['mar', 'espuma', 'viento', 'lluvia', 'lluviaSuave', 'borboteo']) nodos[k].g.connect(maestro);
+    for (const k of ['mar', 'espuma', 'viento', 'lluvia', 'lluviaSuave', 'borboteo']) nodos[k].g.connect(ambiente);
     return true;
   }
 
@@ -74,19 +164,16 @@ export function crearAudio() {
     osc.start(t0); lfo.start(t0); osc.stop(t0 + 0.7); lfo.stop(t0 + 0.7);
   }
 
+  // retraso: segundos entre el relámpago y el trueno (0,15 s = encima; 2,15 s = lejos)
   function trueno(retraso = 0.3) {
     if (!ctx || !est.activo) return;
     const t0 = ctx.currentTime + retraso;
-    const s = ctx.createBufferSource(); s.buffer = bufferRuido(ctx, 4.5, 'marron');
-    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass';
-    lp.frequency.setValueAtTime(900, t0); lp.frequency.exponentialRampToValueAtTime(70, t0 + 3.8);
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0, t0);
-    g.gain.linearRampToValueAtTime(0.95, t0 + 0.12);
-    g.gain.exponentialRampToValueAtTime(0.35, t0 + 0.9);
-    g.gain.exponentialRampToValueAtTime(0.001, t0 + 4.2);
-    s.connect(lp); lp.connect(g); g.connect(maestro);
-    s.start(t0); s.stop(t0 + 4.5);
+    const cerca = clamp(1 - (retraso - 0.15) / 2, 0, 1);
+    const dur = sintetizarTrueno(ctx, maestro, t0, cerca);
+    // el resto del ambiente (sobre todo la lluvia) se aparta mientras retumba, para que el trueno se oiga
+    const a = nodos.ambiente.gain;
+    a.setTargetAtTime(0.45 + 0.2 * (1 - cerca), t0, 0.05);
+    a.setTargetAtTime(1, t0 + dur * 0.55, 0.6);
   }
 
   const alternar = () => {
@@ -126,5 +213,5 @@ export function crearAudio() {
     }
   }
 
-  return { get activo() { return est.activo; }, alternar, actualizar, trueno };
+  return { get activo() { return est.activo; }, alternar, actualizar, trueno, sintetizarTrueno };
 }

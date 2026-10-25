@@ -7,12 +7,15 @@ import { crearVidrio } from './vidrio.js';
 import { crearAgua } from './agua.js';
 import { texRuido } from './texturas.js';
 import { crearBarco } from './barco.js';
+import { crearBarcoModelo } from './barcoModelo.js';
+import datosBarco from '../assets/barco-web.glb';
 import { crearFlotacion } from './flotacion.js';
 import { crearSensores } from './sensores.js';
 import { crearClima } from './clima.js';
 import { crearUI } from './ui.js';
 import { crearReflejo } from './reflejo.js';
 import { crearAudio } from './audio.js';
+import { crearGotas } from './gotas.js';
 
 const params = new URLSearchParams(location.search);
 const num = (k, d) => (params.has(k) ? parseFloat(params.get(k)) : d);
@@ -25,18 +28,26 @@ const { cubo, pmrem } = crearCubemapEntorno(canal.renderer, 512);
 const botella = crearBotella();
 const mundo = crearMundo({ pmrem });
 const ruido = texRuido(256);
-const barco = crearBarco();
-mundo.escena.add(barco.grupo);
+// Barco: el modelo real (incrustado en la página); ?barco=procedural usa el barco generado por código.
+// Si el modelo fallara al cargar, se usa también el procedural.
+let barco;
+if (params.get('barco') === 'procedural') barco = crearBarco();
+else {
+  try { barco = await crearBarcoModelo(datosBarco); } catch (e) { console.warn('[app] modelo del barco no disponible:', e); barco = crearBarco(); }
+}
+mundo.interior.escena.add(barco.grupo); // el barco vive dentro de la botella, con la luz del clima
 
 const U = {
   tEscena: { value: null }, tAtras: { value: null }, tEntorno: { value: cubo },
   uRes: { value: new THREE.Vector2(1, 1) }, uEntornoRot: { value: new THREE.Matrix3() },
   uProy: { value: new THREE.Vector2(1, 1) }, uTiempo: { value: 0 }, uLuzExt: { value: new THREE.Color(1, 1, 1) }, uDbg: { value: num('dbg', 0) },
+  tGotas: { value: null }, uHayGotas: { value: 0 },
 };
 const vidrio = crearVidrio(U, botella.exterior);
 const agua = crearAgua({ renderer: canal.renderer, botella, texRuido: ruido, cubo, relleno: num('relleno', 0.30) });
 const flotacion = crearFlotacion({ barco, agua, botella });
-const reflejo = crearReflejo({ mundo, barco, renderer: canal.renderer });
+const gotas = crearGotas({ renderer: canal.renderer, agua, botella });
+const reflejo = crearReflejo({ interior: mundo.interior, barco, renderer: canal.renderer });
 
 const camara = new THREE.PerspectiveCamera(20, 2, 5, 220);
 const OBJETIVO = new THREE.Vector3(0.9, -1.2, 0);
@@ -76,17 +87,28 @@ const sensores = crearSensores(lienzo);
 if (params.has('roll') || params.has('pitch')) sensores.inclinar(num('roll', 0), num('pitch', 0));
 
 let audio = crearAudio();
-const clima = crearClima({ mundo, agua, barco, camara, alRayo: (retraso) => audio?.trueno(retraso) });
+// Vibración con los truenos cercanos (Android; iPhone no la permite desde la web). Llega a la vez que el trueno.
+const opciones = { vibrar: true };
+function vibrarTrueno(retraso) {
+  const cerca = Math.max(0, Math.min(1, 1 - (retraso - 0.15) / 2));
+  if (!opciones.vibrar || cerca < 0.35 || !navigator.vibrate) return;
+  const f = 0.5 + 0.5 * cerca;
+  setTimeout(() => { try { navigator.vibrate([Math.round(70 * f), 50, Math.round(160 * f), 90, Math.round(60 * f)]); } catch (_) { /* sin permiso */ } }, retraso * 1000);
+}
+const clima = crearClima({ mundo, agua, barco, botella, camara, alRayo: (retraso) => { audio?.trueno(retraso); vibrarTrueno(retraso); } });
 if (params.has('clima')) clima.fijar(params.get('clima'));
+if (params.has('hora')) clima.fijarHora(num('hora', 12));
 if (params.has('mar')) clima.ponerMar(num('mar', 0.5));
 if (params.has('viento')) clima.ponerViento(num('viento', 0.75));
 if (modoCaptura) clima.saltar();
 
+const rend = { fps: 0, cuadros: 0, desde: 0 }; // fotogramas por segundo medidos (se muestran en Ajustes)
 if (params.get('ui') !== '0') {
   crearUI({
     clima, sensores, audio,
     alAjustarCalidad: () => { calidad.modo = MODOS[(MODOS.indexOf(calidad.modo) + 1) % MODOS.length]; redimensionar(); },
     estadoCalidad: () => calidad.modo,
+    opciones, rendimiento: () => ({ fps: rend.fps, resolucion: Math.round(dprActual() / dprDisp * 100) }),
   });
 }
 
@@ -114,26 +136,29 @@ function avanzar(dt, t) {
   if (sensores.sacudida > 0.2 && impulsos.length < 7) impulsos.push([(Math.random() * 2 - 1) * 12, (Math.random() * 2 - 1) * 4, (Math.random() - 0.5) * 0.35 * sensores.sacudida, 0.5]);
   agua.simular(dt, t, impulsos);
 
-  clima.actualizar(dt, t, sensores.g, camara.aspect);
+  clima.actualizar(dt, t, sensores.g, camara.aspect, canal.alto);
   audio.actualizar(clima.p, sensores.sacudida, dt);
   flotacion.actualizar(dt, t, clima.p.viento);
+  gotas.actualizar(dt, { lluvia: clima.p.lluvia, g: sensores.g });
   barco.actualizar(t, clima.p.viento);
 }
 
-function dibujar(t) {
+function dibujar(t, dt = 1 / 60) {
+  U.tGotas.value = gotas.dibujar(dt);
+  U.uHayGotas.value = gotas.activo ? 1 : 0;
   tmpM4.makeRotationFromQuaternion(clima.qEnv);
   entornoRot.setFromMatrix4(tmpM4);
   U.uEntornoRot.value.copy(entornoRot);
-  U.uLuzExt.value.copy(clima.luzFinal);
   sol.copy(solMundo).applyQuaternion(clima.qInv);
   U.tEscena.value = canal.rtComp.texture;
   U.tAtras.value = canal.rtAtras.texture;
   U.uTiempo.value = t;
   canal.dibujar({
-    mundo: mundo.escena, camara, vidrio, tiempo: t,
+    mundo: mundo.escena, interior: mundo.interior.escena, camara, vidrio, tiempo: t,
     reflejoPasada: (rt) => reflejo.renderizar(camara, rt, agua.estado),
     aguaPasada: (rtEscena, rtComp) => agua.pasadaVolumen(camara, rtEscena, rtComp, {
       entornoRot, luz: clima.luzFinal, sol, niebla: clima.p.niebla, colNiebla: clima.p.colNiebla, refl: canal.rtRefl.texture,
+      aire: clima.p.aire, colAire: clima.colAire, nubes: clima.nubes,
     }),
   });
   window.__cuadros = (window.__cuadros || 0) + 1;
@@ -151,15 +176,20 @@ function cuadro(ahora) {
   const dtMs = ultimo === null ? 16.7 : ahora - ultimo;
   const dt = Math.min(0.05, dtMs / 1000);
   ultimo = ahora; tTotal += dt;
+  rend.cuadros++;
+  if (ahora - rend.desde >= 1000) { rend.fps = Math.round(rend.cuadros * 1000 / (ahora - rend.desde)); rend.cuadros = 0; rend.desde = ahora; }
   adaptarCalidad(Math.min(dtMs, 100));
   avanzar(dt, tTotal);
-  dibujar(tTotal);
+  dibujar(tTotal, dt);
 }
 
 // Con ?t=… se avanza la simulación sin dibujar y se renderiza un solo cuadro (capturas reproducibles).
 if (modoCaptura) {
   const T = num('t', 1), pasos = Math.max(1, Math.round(T * 30));
-  for (let i = 0; i <= pasos; i++) avanzar(1 / 30, i / 30);
+  for (let i = 0; i <= pasos; i++) {
+    if (params.has('rayo') && i === pasos) clima.forzarRayo(i / 30 - 0.02);
+    avanzar(1 / 30, i / 30);
+  }
   dibujar(T);
   window.__listo = true;
 } else {
@@ -167,4 +197,4 @@ if (modoCaptura) {
   requestAnimationFrame(bucle);
   window.__listo = true;
 }
-window.__api = { clima, sensores, agua, calidad, redibujar: () => dibujar(tTotal), camara, canal, avanzar, flotacion, barco, botella };
+window.__api = { clima, sensores, agua, calidad, redibujar: () => dibujar(tTotal), camara, canal, avanzar, flotacion, barco, botella, audio, gotas };

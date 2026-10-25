@@ -10,9 +10,10 @@ const minify = !process.argv.includes('--sin-minificar');
 const r = await build({
   entryPoints: [resolve(raiz, 'src/main.js')],
   bundle: true,
-  format: 'iife',
+  format: 'esm',          // módulo: permite esperar a la carga del modelo del barco
+  loader: { '.glb': 'binary' }, // el modelo va incrustado en la página
   minify,
-  target: 'es2020',
+  target: 'es2022',       // Safari 15+, Chrome 89+ (await en el nivel superior)
   write: false,
   legalComments: 'none',
   logLevel: 'info',

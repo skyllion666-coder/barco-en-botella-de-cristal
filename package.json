@@ -8,10 +8,16 @@
     "build": "node scripts/build.mjs",
     "dev": "node scripts/build.mjs --serve",
     "shot": "node scripts/shot.mjs",
-    "prueba:giro": "node scripts/prueba_giro.mjs"
+    "prueba:giro": "node scripts/prueba_giro.mjs",
+    "prueba:trueno": "node scripts/prueba_trueno.mjs"
   },
   "devDependencies": {
+    "@gltf-transform/core": "^4.2.1",
+    "@gltf-transform/extensions": "^4.2.1",
+    "@gltf-transform/functions": "^4.2.1",
+    "draco3dgltf": "^1.5.7",
     "esbuild": "0.28.2",
+    "meshoptimizer": "^0.22.0",
     "three": "0.186.1"
   }
 }

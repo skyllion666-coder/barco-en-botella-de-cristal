@@ -107,7 +107,7 @@ const FRAG_SIM = /* glsl */`
 const FRAG_ALTURA = /* glsl */`
   uniform sampler2D tSim; uniform sampler2D tPrev; uniform sampler2D tRuido;
   uniform vec2 uDominio; uniform float uTiempoMar; uniform float uDt; uniform float uRiple;
-  uniform float uEspuma; uniform float uAdv; uniform vec2 uTexelSim; uniform vec4 uCasco; uniform float uEscCasco;
+  uniform float uEspuma; uniform float uAdv; uniform vec2 uTexelSim; uniform vec4 uCasco; uniform vec2 uEscCasco;
   ${GLSL_OLEAJE}
   varying vec2 vUv;
   float total(vec2 p, vec2 uv){
@@ -133,8 +133,9 @@ const FRAG_ALTURA = /* glsl */`
     float vel = abs(texture2D(tSim, vUv).r - texture2D(tSim, vUv).g);
     emision += smoothstep(0.010, 0.05, vel) * 0.55 * uEspuma;
     // espuma del barco: borde del casco, ola de proa y estela
-    vec2 rel = (p - uCasco.xy) / uEscCasco; // en medidas del modelo del barco
-    float dx = dot(rel, uCasco.zw), dz = rel.x * (-uCasco.w) + rel.y * uCasco.z;
+    vec2 rel = p - uCasco.xy;
+    // a lo largo y a lo ancho del casco, en medidas del casco procedural
+    float dx = dot(rel, uCasco.zw) / uEscCasco.x, dz = (rel.x * (-uCasco.w) + rel.y * uCasco.z) / uEscCasco.y;
     float semiAncho = 0.82 * sqrt(max(0.0, 1.0 - (dx / 4.3) * (dx / 4.3)));
     float dBorde = abs(dz) - semiAncho;
     float banda = smoothstep(0.5, 0.02, dBorde) * step(-0.25, dBorde) * smoothstep(-4.4, 3.2, dx) * step(abs(dx), 4.4);
@@ -157,6 +158,7 @@ const FRAG_VOLUMEN = /* glsl */`
   uniform vec3 uSol; uniform vec3 uSolColor; uniform vec3 uSigma; uniform vec3 uDispersion; uniform float uHayRefl;
   uniform vec3 uOscuro; uniform float uAmp;
   uniform float uNiebla; uniform vec3 uColNiebla; uniform float uRayoFondo;
+  uniform float uAire; uniform vec3 uColAire; uniform float uNubes;
   ${GLSL_PLANO}
   varying vec2 vUv;
 
@@ -169,11 +171,27 @@ const FRAG_VOLUMEN = /* glsl */`
     return z / max(-rdView.z, 1e-3);
   }
   vec3 rdViewDe(vec2 uv){ return normalize(vec3((uv * 2.0 - 1.0) / uProy, -1.0)); }
-  vec3 conNiebla(vec3 c, float t0, float t1, float dEsc){
-    if (uNiebla <= 0.0) return c;
+  // Aire del interior de la botella: niebla y atmósfera del clima (nubes de tormenta que se mueven, noche...).
+  // Solo afecta a lo que se ve a través de la cavidad; la habitación de alrededor no cambia.
+  vec3 conNiebla(vec3 c, float t0, float t1, float dEsc, vec3 rd, float t1Aire){
     float L = clamp(min(dEsc, t1) - t0, 0.0, 30.0);
-    float a = 1.0 - exp(-uNiebla * L);
-    return mix(c, uColNiebla * (0.35 + 0.65 * length(uOscuro) * 0.577), a);
+    if (uNiebla > 0.0){
+      float a = 1.0 - exp(-uNiebla * L);
+      c = mix(c, uColNiebla * (0.35 + 0.65 * length(uOscuro) * 0.577), a);
+    }
+    L = clamp(min(dEsc, t1Aire) - t0, 0.0, 30.0); // la atmósfera solo cuenta el tramo de aire
+    if (uAire > 0.0 && L > 0.0){
+      vec3 Pm = uCam + rd * (t0 + L * 0.5);
+      float h = dot(uN, Pm) - uD;
+      vec2 q = vec2(dot(Pm, uE1), dot(Pm, uE2));
+      float nub = texture2D(tRuido, q * 0.075 + vec2(uTiempo * 0.010, uTiempo * 0.003)).r * 0.6
+                + texture2D(tRuido, q * 0.19 - vec2(uTiempo * 0.022, -uTiempo * 0.006)).g * 0.4;
+      // más densa arriba (nubes) que junto al agua
+      float dens = uAire * (0.5 + 0.9 * smoothstep(-0.5, 4.5, h)) * mix(1.0, 0.25 + 1.5 * nub, uNubes);
+      float a = 1.0 - exp(-dens * L);
+      c = mix(c, uColAire * (0.75 + 0.5 * nub * uNubes), a);
+    }
+    return c;
   }
   vec3 envMuestra(vec3 dir, float lod){ return textureLod(tEntorno, uEntornoRot * dir, lod).rgb * uLuzExt; }
 
@@ -234,11 +252,11 @@ const FRAG_VOLUMEN = /* glsl */`
         }
       }
     }
-    if (tE < 0.0){ gl_FragColor = vec4(conNiebla(base.rgb, tIn, tOut, dEscBase), 1.0); return; }
+    if (tE < 0.0){ gl_FragColor = vec4(conNiebla(base.rgb, tIn, tOut, dEscBase, rd, tOut), 1.0); return; }
 
     // distancia a lo que hay en este píxel (barco, mesa...)
     float dEsc0 = dEscBase;
-    if (dEsc0 < tE - 0.02){ gl_FragColor = vec4(conNiebla(base.rgb, tIn, tOut, dEscBase), 1.0); return; }
+    if (dEsc0 < tE - 0.02){ gl_FragColor = vec4(conNiebla(base.rgb, tIn, tOut, dEscBase, rd, tOut), 1.0); return; }
 
     vec3 P = ro + rd * tE;
     vec4 al = alturaEn(P);
@@ -316,7 +334,7 @@ const FRAG_VOLUMEN = /* glsl */`
       sub += vec3(0.20, 0.28, 0.30) * menisco * uOscuro;
       resultado = sub;
     }
-    gl_FragColor = vec4(conNiebla(mix(base.rgb, resultado, alfa), tIn, tOut, dEscBase), 1.0);
+    gl_FragColor = vec4(conNiebla(mix(base.rgb, resultado, alfa), tIn, tOut, dEscBase, rd, mix(tOut, tE, alfa)), 1.0);
   }`;
 
 const FRAG_DIST = /* glsl */`
@@ -359,7 +377,7 @@ export function crearAgua({ renderer, botella, texRuido, cubo, relleno = 0.30 })
   const matAlt = quad(FRAG_ALTURA, {
     tSim: { value: null }, tPrev: { value: null }, tRuido: { value: texRuido }, uDominio: { value: new THREE.Vector2(DOM_U, DOM_V) },
     uTiempoMar: { value: 0 }, uDt: { value: 1 / 60 }, uRiple: { value: 1 }, uEspuma: { value: 1 }, uAdv: { value: 2 }, uTexelSim: { value: new THREE.Vector2(1 / RES_SIM[0], 1 / RES_SIM[1]) },
-    uAmp: U.uAmp, uLambda: U.uLambda, uDrag: U.uDrag, uCasco: { value: new THREE.Vector4(-4, 0, 1, 0) }, uEscCasco: { value: 1 },
+    uAmp: U.uAmp, uLambda: U.uLambda, uDrag: U.uDrag, uCasco: { value: new THREE.Vector4(-4, 0, 1, 0) }, uEscCasco: { value: new THREE.Vector2(1, 1) },
   });
   const UV = {
     tColor: { value: null }, tProf: { value: null }, tFrente: { value: rtFrente.texture }, tFondo: { value: rtFondo.texture },
@@ -370,6 +388,7 @@ export function crearAgua({ renderer, botella, texRuido, cubo, relleno = 0.30 })
     uTiempo: { value: 0 }, uLuzExt: { value: new THREE.Color(1, 1, 1) }, uSol: { value: new THREE.Vector3(0, 1, 0) }, uSolColor: { value: new THREE.Vector3(1, 0.93, 0.8) },
     uSigma: { value: new THREE.Vector3(0.55, 0.16, 0.10) }, uDispersion: { value: new THREE.Vector3() }, uHayRefl: { value: 0 },
     uOscuro: { value: new THREE.Color(1, 1, 1) }, uAmp: U.uAmp, uNiebla: { value: 0 }, uColNiebla: { value: new THREE.Color(0.6, 0.65, 0.7) }, uRayoFondo: { value: 0 },
+    uAire: { value: 0 }, uColAire: { value: new THREE.Color() }, uNubes: { value: 0 },
     uN: U.uN, uE1: U.uE1, uE2: U.uE2, uD: U.uD, tPerfil: U.tPerfil,
   };
   const matVol = quad(FRAG_VOLUMEN, UV);
@@ -524,6 +543,8 @@ export function crearAgua({ renderer, botella, texRuido, cubo, relleno = 0.30 })
     UV.uEntornoRot.value.copy(opts.entornoRot);
     UV.uLuzExt.value.copy(opts.luz);
     UV.uNiebla.value = opts.niebla ?? 0; UV.uColNiebla.value.copy(opts.colNiebla);
+    UV.uAire.value = opts.aire ?? 0; UV.uNubes.value = opts.nubes ?? 0;
+    if (opts.colAire) UV.uColAire.value.copy(opts.colAire);
     UV.uSol.value.copy(opts.sol);
     UV.uOscuro.value.copy(opts.luz);
     UV.tRefl.value = opts.refl || null; UV.uHayRefl.value = opts.refl ? 1 : 0;

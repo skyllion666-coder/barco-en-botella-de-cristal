@@ -51,6 +51,33 @@ Probado en móvil real (GitHub Pages): al pasar de horizontal a vertical el barc
 - Soporte: peana moldurada (zócalo, escalón y canto redondeado) y cunas con cantos redondeados y muesca lateral (`mundo.js`).
 - Coste en móvil sin medir: el vidrio suma unos senos por píxel en sus dos pasadas y el fondo pasa de 14 a 22 luces.
 
+### Truenos audibles (25-10-2026)
+- Problema (probado en móvil): no se oían. El trueno era ruido por debajo de ~200 Hz, que el altavoz del móvil no reproduce, y la lluvia lo tapaba (−3 dB respecto a la lluvia).
+- Nuevo trueno (`sintetizarTrueno` en `audio.js`): chasquido si cae cerca, retumbo saturado con armónicos en 120-2000 Hz, 3-5 rodamientos, subgrave para auriculares
+  y posición estéreo aleatoria. La distancia sale del retraso relámpago-trueno. Mientras retumba, el ambiente baja (la lluvia se aparta).
+- Prueba: `node scripts/prueba_trueno.mjs` (con `--anterior` mide la versión vieja). Por altavoz de móvil simulado: +7,3 dB (cercano) y +6,7 dB (lejano) sobre la lluvia,
+  sin contar el bajón del ambiente.
+
+### Todo el clima dentro de la botella (25-10-2026)
+- Decisión del usuario: la tormenta, la iluminación y el resto del clima ocurren solo DENTRO de la botella. La habitación (fondo, mesa, soporte, corcho) tiene luz fija.
+- Escena interior propia (`mundo.interior`): barco, lluvia, nieve, rayos y estrellas, con luces que siguen al clima; se dibuja sobre la habitación compartiendo profundidad (`canalizacion.js`).
+- Atmósfera interior en la pasada de volumen (`agua.js`, parámetro `aire` de cada clima): nubes que se mueven, más densas arriba; el rayo la enciende.
+- Rayos visibles dentro (`cielo.js`): canal en zigzag con ramas, núcleo HDR con resplandor y luz puntual que ilumina barco y agua. Sobre la mesa, solo un leve destello.
+- Noche: estrellas que titilan en el aire interior y farolillos del barco.
+- Gotas en el cristal (`gotas.js`): resbalan según la inclinación, se descuelgan del techo y se funden con el agua; mapa de alturas en GPU con estela; el vidrio las refracta como lentes. Si no hay gotas, no se dibuja nada.
+- Ajustes nuevos: «Hora real» (día/noche y luz dorada según la hora local, combinado con el clima; `?hora=21.5` para pruebas), «Vibración» con los truenos cercanos (Android; en iPhone no se muestra) y línea de rendimiento (FPS y resolución).
+- Mejorar el barco: desde este entorno no se puede descargar de Poly Pizza, Sketchfab ni Poly Haven (bloqueados); GitHub sí. Opciones en la conversación.
+
+### Barco real (25-10-2026)
+- Modelo subido por el usuario a su repositorio: «Ottoman Coastal Trade Tall Ship», de polygora (Sketchfab, CC-BY). Créditos en Ajustes, README y `assets/CREDITOS.md`.
+- `scripts/preparar_barco.mjs` genera `assets/barco-web.glb` desde el original (no desde `barco-ligero.glb`, que deformaba velas y perdía cabos):
+  marco de la app, simplificación solo de piezas pesadas, velas subdivididas con hinchado (_EMPUJE), unión por material (61 → 9 mallas),
+  textura a 1024, meshopt. 178.424 → 69.749 triángulos, 743 KB. Colores retocados (lona, casco menos saturado, dorados metálicos).
+- `src/barcoModelo.js` lo carga (incrustado en `docs/index.html`, que pasa a 1,8 MB y a módulo ES2022) con la misma interfaz que el barco procedural.
+  `?barco=procedural` usa el barco generado por código (también si el modelo fallara).
+- La flotación y la espuma usan las medidas del casco del modelo (`barco.info`); rumbo de reposo casi de costado (-0,30 rad).
+- Prueba de giro con el modelo: nunca toca el cristal, sin saltos, sin encogerse.
+
 ## Decisiones tomadas
 - Estilo: lo más realista posible (superar la foto de referencia).
 - El barco es procedural porque el entorno de desarrollo no puede descargar de Poly Pizza, Sketchfab ni Poly Haven (red restringida).
@@ -59,22 +86,15 @@ Probado en móvil real (GitHub Pages): al pasar de horizontal a vertical el barc
 
 ## Decisiones pendientes
 - Dónde alojar para probar con sensores (repositorio de GitHub y GitHub Pages).
-- Tecnología final de la app (Capacitor, nativa...).
+- Tecnología final de la app (Capacitor, nativa...). El usuario la deja para el final, cuando todo esté acabado.
 - Nombre de la app.
 
 ## Estructura
 - `src/` código fuente (módulos ES), `scripts/build.mjs` empaqueta todo en `docs/index.html` (un solo archivo).
 - `scripts/prueba_giro.mjs` prueba de regresión del barco al girar (`npm run prueba:giro`).
 - `scripts/shot.mjs` captura reproducible (`node scripts/shot.mjs salida.png 1600 740 "t=4&ui=0&clima=lluvia&roll=15"`).
-- Parámetros de URL: `t` (modo captura), `clima`, `mar`, `viento`, `roll`, `pitch`, `dpr`, `ui=0`, `dbg`.
+- Parámetros de URL: `t` (modo captura), `rayo=1` (relámpago en la captura), `clima`, `mar`, `viento`, `roll`, `pitch`, `dpr`, `ui=0`, `dbg`.
 
 ## Reglas
 - Todo el texto de la app y la conversación, en español.
 - Mantener el proyecto ligero (menos de 100 MB) para poder subirlo a sesiones en la nube.
-
-## Modelo real del barco (25-10-2026)
-Está en `assets/barco-ligero.glb` (créditos en `assets/CREDITOS.md`; hay que citar al autor en la app).
-Pendiente: cargarlo en `src/barco.js` en lugar del barco procedural, ajustar escala y orientación (mide ~3,1 × 7,7 × 6,5 unidades; el Draco necesita `DRACOLoader`), conectarlo con flotación, espuma y reflejo, y comprobar que no atraviesa el cristal. Las velas del modelo no tienen textura: darles material de lona.
-
-## Galeón alternativo (25-10-2026)
-`assets/galeon-ligero.glb` (84.733 caras, ~5 MB, mide ~6,3 × 16,1 × 12,1 unidades; casco oscuro y rojo, 3 palos + bauprés, velas con textura). Es más parecido a un barco de botella clásico que el Ottoman. Su autor y licencia están por confirmar (ver `assets/CREDITOS.md`).

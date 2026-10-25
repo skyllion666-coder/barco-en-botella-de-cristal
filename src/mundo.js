@@ -1,4 +1,5 @@
-// Mundo exterior a la botella: fondo desenfocado, mesa de madera, soporte de caoba y corcho.
+// Mundo exterior a la botella: fondo desenfocado, mesa de madera, soporte de caoba y corcho. La habitación tiene
+// luz fija; el clima (tormenta, noche, rayos...) vive solo en la escena interior, con sus propias luces.
 import * as THREE from 'three';
 import { texMadera, texCorcho } from './texturas.js';
 import { CORCHO_INT_X, BOCA_X, R_CUERPO } from './bottle.js';
@@ -8,10 +9,9 @@ export const Y_MESA = -7.95;
 function fondo() {
   const mat = new THREE.ShaderMaterial({
     depthWrite: false,
-    uniforms: { uBrillo: { value: 1 }, uNoche: { value: 0 }, uRayo: { value: 0 }, uTinte: { value: new THREE.Color(1, 1, 1) } },
+    uniforms: {},
     vertexShader: `varying vec2 vUv; varying vec3 vW; void main(){ vUv = uv; vec4 w = modelMatrix*vec4(position,1.); vW = w.xyz; gl_Position = projectionMatrix*viewMatrix*w; }`,
     fragmentShader: `
-      uniform float uBrillo; uniform float uNoche; uniform float uRayo; uniform vec3 uTinte;
       varying vec2 vUv; varying vec3 vW;
       float h21(vec2 p){ p = fract(p*vec2(123.34,456.21)); p += dot(p,p+45.32); return fract(p.x*p.y); }
       void main(){
@@ -41,15 +41,6 @@ function fondo() {
           vec3 tono = mix(vec3(1.0, 0.72, 0.45), vec3(0.75, 0.82, 1.0), step(0.78, h21(vec2(fi, 9.9))));
           base += tono * disco * (0.02 + 0.055 * h21(vec2(fi, 5.5)));
         }
-        base *= uBrillo * uTinte;
-        // estrellas y luna de noche
-        vec2 q = vW.xy * 0.9;
-        vec2 cel = floor(q); vec2 f = fract(q) - 0.5;
-        float estr = step(0.985, h21(cel + 7.3)) * smoothstep(0.12, 0.0, length(f));
-        base += vec3(0.8, 0.85, 1.0) * estr * uNoche * (0.4 + 0.6 * h21(cel));
-        float luna = smoothstep(2.4, 2.0, length(vW.xy - vec2(-34.0, 42.0)));
-        base += vec3(0.55, 0.62, 0.8) * luna * uNoche * 1.6;
-        base += vec3(0.55, 0.6, 0.75) * uRayo * (0.5 + 0.5 * smoothstep(-0.2, 0.7, p.y));
         gl_FragColor = vec4(base, 1.0);
       }`,
   });
@@ -209,7 +200,7 @@ export function crearMundo({ pmrem }) {
   );
   grupoFijo.add(corcho);
 
-  // ---- luces directas (el resto viene del entorno)
+  // ---- luces directas de la habitación (el resto viene del entorno)
   const sol = new THREE.DirectionalLight(0xfff1de, 2.2);
   sol.position.set(-6, 9, 8);
   escena.add(sol);
@@ -217,5 +208,16 @@ export function crearMundo({ pmrem }) {
   relleno.position.set(8, 2, 6);
   escena.add(relleno);
 
-  return { escena, grupoFijo, luces: { sol, relleno }, fondo: fondoMesh.material, efectoMesa: efectoMesa.material };
+  // ---- escena interior de la botella: barco, precipitación, rayos y estrellas, con luces que sigue el clima
+  const escenaInt = new THREE.Scene();
+  escenaInt.environment = pmrem;
+  escenaInt.environmentIntensity = 1.0;
+  const solInt = sol.clone(), rellenoInt = relleno.clone();
+  const rayoInt = new THREE.PointLight(0xc8d8ff, 0, 0, 2);
+  escenaInt.add(solInt, rellenoInt, rayoInt);
+
+  return {
+    escena, grupoFijo, luces: { sol, relleno }, fondo: fondoMesh.material, efectoMesa: efectoMesa.material,
+    interior: { escena: escenaInt, luces: { sol: solInt, relleno: rellenoInt, rayo: rayoInt } },
+  };
 }

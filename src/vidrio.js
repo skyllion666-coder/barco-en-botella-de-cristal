@@ -3,6 +3,7 @@
 //  2) Caras delanteras -> refracción en espacio de pantalla con dispersión, absorción verde-azulada,
 //     reflejos de entorno por la pared delantera y por la trasera (doble reflejo, como en la foto).
 import * as THREE from 'three';
+import { GOTAS_X0, GOTAS_X1 } from './gotas.js';
 
 const VERT = /* glsl */`
   attribute float pared;
@@ -47,6 +48,7 @@ const FRAG_FRENTE = /* glsl */`
   uniform sampler2D tEscena; uniform sampler2D tAtras; uniform samplerCube tEntorno;
   uniform vec2 uRes; uniform mat3 uEntornoRot; uniform vec2 uProy;
   uniform float uTiempo; uniform vec3 uLuzExt; uniform float uDbg;
+  uniform sampler2D tGotas; uniform float uHayGotas;
   varying vec3 vN; varying vec3 vP; varying vec3 vL; varying float vPared; varying vec3 vRad; varying vec3 vEje; varying vec3 vTan;
   ${GLSL_SOPLADO}
 
@@ -59,6 +61,22 @@ const FRAG_FRENTE = /* glsl */`
   void main(){
     vec3 N = soplado(normalize(vN), vL, vEje, vTan);
     vec3 I = normalize(vP);
+
+    // gotas en la cara interior: la normal sigue la pendiente del mapa de alturas (x, ángulo)
+    float gota = 0.0, borde = 0.0, nucleo = 0.0;
+    if (uHayGotas > 0.5){
+      const float GX0 = ${GOTAS_X0.toFixed(3)}, GX1 = ${GOTAS_X1.toFixed(3)};
+      float R = max(length(vL.yz), 0.3);
+      vec2 uvG = vec2((vL.x - GX0) / (GX1 - GX0), fract(atan(vL.z, vL.y) / 6.2831853));
+      vec2 dU = vec2(1.0 / 1024.0, 0.0), dV = vec2(0.0, 1.0 / 512.0);
+      float sx = (texture2D(tGotas, uvG + dU).r - texture2D(tGotas, uvG - dU).r) / (2.0 * (GX1 - GX0) / 1024.0);
+      float sa = (texture2D(tGotas, uvG + dV).r - texture2D(tGotas, uvG - dV).r) / (2.0 * R * 6.2831853 / 512.0);
+      vec3 pend = normalize(vEje) * sx + normalize(vTan + vec3(1e-5)) * sa;
+      N = normalize(N + pend * 0.9);
+      gota = smoothstep(0.004, 0.03, texture2D(tGotas, uvG).r);
+      borde = gota * smoothstep(0.6, 2.0, length(pend));
+      nucleo = gota * (1.0 - smoothstep(0.3, 1.0, length(pend)));
+    }
 
     // Anillos concéntricos del fondo grueso de la base
     float rho = length(vL.yz);
@@ -95,9 +113,13 @@ const FRAG_FRENTE = /* glsl */`
     float camino = wF / cosF + wB / cosB;
     vec3 absorcion = exp(-vec3(0.55, 0.16, 0.24) * camino * 0.16);
     col *= absorcion;
+    // lente diminuta: borde oscuro (refleja hacia dentro) y centro que concentra la luz
+    col *= 1.0 - 0.45 * borde;
+    col += vec3(0.05, 0.055, 0.06) * nucleo * uLuzExt;
 
     // Reflejos
     float Ff = schlick(0.045, cosF);
+    Ff = min(1.0, Ff + 0.10 * gota); // la superficie curva de la gota refleja más (destellos)
     float Fb = schlick(0.045, cosB);
     vec3 Rf = reflect(I, N);
     vec3 Rb = reflect(I, Nb);
@@ -128,6 +150,7 @@ export function crearVidrio(U, geometria) {
     uniforms: {
       tEscena: U.tEscena, tAtras: U.tAtras, tEntorno: U.tEntorno, uRes: U.uRes,
       uEntornoRot: U.uEntornoRot, uProy: U.uProy, uTiempo: U.uTiempo, uLuzExt: U.uLuzExt, uDbg: U.uDbg,
+      tGotas: U.tGotas, uHayGotas: U.uHayGotas,
     },
   });
   const atras = new THREE.Mesh(geometria, matAtras);

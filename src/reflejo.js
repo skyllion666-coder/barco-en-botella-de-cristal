@@ -2,21 +2,22 @@
 // que queda por debajo, mediante un plano de recorte) y la pasada de volumen lo muestrea en pantalla.
 import * as THREE from 'three';
 
-export function crearReflejo({ mundo, barco, renderer }) {
+export function crearReflejo({ interior, barco, renderer }) {
   const escena = new THREE.Scene();
-  escena.environment = mundo.escena.environment;
+  escena.environment = interior.escena.environment;
   const grupo = barco.grupo.clone();
   grupo.matrixAutoUpdate = false;
   escena.add(grupo);
-  const sol = mundo.luces.sol.clone(), relleno = mundo.luces.relleno.clone();
-  escena.add(sol, relleno);
+  const L = interior.luces;
+  const sol = L.sol.clone(), relleno = L.relleno.clone(), rayo = L.rayo.clone();
+  escena.add(sol, relleno, rayo);
 
   const R = new THREE.Matrix4(), plano = new THREE.Plane(), nNeg = new THREE.Vector3();
 
   function renderizar(camara, rt, estado) {
-    escena.environmentIntensity = mundo.escena.environmentIntensity;
-    escena.environmentRotation.copy(mundo.escena.environmentRotation);
-    for (const [a, b] of [[sol, mundo.luces.sol], [relleno, mundo.luces.relleno]]) {
+    escena.environmentIntensity = interior.escena.environmentIntensity;
+    escena.environmentRotation.copy(interior.escena.environmentRotation);
+    for (const [a, b] of [[sol, L.sol], [relleno, L.relleno], [rayo, L.rayo]]) {
       a.position.copy(b.position); a.intensity = b.intensity; a.color.copy(b.color);
     }
     const { x, y, z } = estado.n, d = estado.d;
