@@ -3,3 +3,8 @@ dist/
 *.log
 # original del galeón (43 MB): se sube aparte; hace falta para regenerar assets/barco-galeon.glb
 assets/galeone_ii.glb
+android/build
+android/.gradle
+android/app/build
+android/app/src/main/assets/www
+releases/*.apk
