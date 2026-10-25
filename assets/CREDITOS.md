@@ -24,3 +24,5 @@ La app trae los dos barcos y se eligen en Ajustes → «Barco». El galeón es e
 - Colores: lona en lugar de blanco puro, pintura del casco algo menos saturada, molduras doradas metálicas, metal con brillo.
 
 La versión `barco-ligero.glb` que se hizo con Blender (Decimate al 20 %) no se usa: deformaba las velas y perdía cabos y obenques.
+
+- `galeon-1024.glb`: igual que `galeon-ligero.glb` (84.735 caras) pero con texturas hasta 1024 px (~10,6 MB). El original de 43 MB no se sube al repositorio porque su licencia está por confirmar.
