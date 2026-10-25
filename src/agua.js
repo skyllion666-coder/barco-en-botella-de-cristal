@@ -368,9 +368,19 @@ const FRAG_VOLUMEN = /* glsl */`
       // espuma
       float rn = texture2D(tRuido, vec2(dot(P, uE1), dot(P, uE2)) * 0.45 + 0.13).g;
       float rn2 = texture2D(tRuido, vec2(dot(P, uE1), dot(P, uE2)) * 1.7).b;
-      float fm = clamp(al.a * (0.55 + 0.9 * rn) - 0.12 * rn2, 0.0, 1.0);
-      fm = smoothstep(0.12, 0.62, fm);
-      vec3 colEsp = vec3(0.80, 0.86, 0.88) * (0.50 + 0.55 * clamp(dot(N, uSol) * 0.5 + 0.55, 0.0, 1.0)) * uOscuro + envR * 0.15;
+      // espuma de mar: encaje fino de filamentos y huecos (donde se cruzan dos ruidos), semitransparente; solo la
+      // espuma recién hecha se junta en islas más densas. Va pegada al agua y deriva despacio.
+      vec2 pq = vec2(dot(P, uE1), dot(P, uE2));
+      float a1 = texture2D(tRuido, pq * 0.95 + vec2(uTiempo * 0.020, 0.0)).g;
+      float a2 = texture2D(tRuido, pq * 1.10 + vec2(0.31, 0.17 - uTiempo * 0.016)).b;
+      float encaje = pow(clamp(1.0 - abs(a1 - a2) * 3.6, 0.0, 1.0), 2.5);
+      float cob = clamp(al.a * (0.75 + 0.6 * rn), 0.0, 1.0);
+      float islas = smoothstep(0.55, 0.85, cob) * smoothstep(0.45, 0.75, rn2);
+      float fm = smoothstep(0.08, 0.5, cob) * max(encaje, islas);
+      fm = clamp(fm * (0.75 + 0.35 * rn2), 0.0, 0.88);
+      // la espuma: blanca algo azulada, con brillos sueltos donde las burbujas miran al sol
+      float chisp = pow(max(dot(R, uSol), 0.0), 24.0) * step(0.6, texture2D(tRuido, pq * 3.1).r);
+      vec3 colEsp = vec3(0.80, 0.86, 0.88) * (0.50 + 0.55 * clamp(dot(N, uSol) * 0.5 + 0.55, 0.0, 1.0)) * uOscuro + envR * 0.15 + uSolColor * chisp * 0.8;
       resultado = mix(superficie, colEsp, fm);
       // bioluminiscencia: de noche el agua agitada (espuma, estela, crestas) brilla en azul verdoso, a destellos
       float chispa = 0.55 + 0.45 * sin(uTiempo * 6.0 + rn * 40.0 + rn2 * 17.0);

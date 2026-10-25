@@ -66,8 +66,8 @@ export function crearGotas({ renderer, agua, botella }) {
       void main(){
         float q = dot(vQ, vQ);
         if (q > 1.0) discard;
-        // altura del casquete en unidades de la escena (gota de ángulo de contacto bajo)
-        gl_FragColor = vec4(sqrt(1.0 - q) * vR * 0.55, 0.0, 0.0, 1.0);
+        // altura del casquete en unidades de la escena (gota aplastada contra el vidrio, ángulo de contacto bajo)
+        gl_FragColor = vec4(sqrt(1.0 - q) * vR * 0.32, 0.0, 0.0, 1.0);
       }`,
   });
   const malla = new THREE.Mesh(geo, matGota); malla.frustumCulled = false;
@@ -82,7 +82,7 @@ export function crearGotas({ renderer, agua, botella }) {
 
   function nacer() {
     for (let k = 0; k < 6; k++) {
-      const g = { x: al(BASE_INT_X + 0.8, CORCHO_INT_X - 2.5), a: al(-Math.PI, Math.PI), r: al(0.05, 0.16), vx: 0, va: 0, vida: al(14, 30), pega: al(0.3, 0.75) };
+      const g = { x: al(BASE_INT_X + 0.8, CORCHO_INT_X - 2.5), a: al(-Math.PI, Math.PI), r: al(0.03, 0.11), vx: 0, va: 0, vida: al(14, 30), pega: al(0.3, 0.75) };
       if (!bajoAgua(g)) { gotas.push(g); return; }
     }
   }
@@ -108,10 +108,10 @@ export function crearGotas({ renderer, agua, botella }) {
       d.x += d.vx * dt;
       d.a += d.va * dt / Math.max(botella.rIn(d.x), 0.5);
       // al resbalar crecen un poco (recogen otras gotitas) y pierden adherencia
-      if (v > 0) { d.r = Math.min(0.19, d.r + dt * 0.006); d.pega = Math.max(0.2, d.pega - dt * 0.03); }
+      if (v > 0) { d.r = Math.min(0.14, d.r + dt * 0.006); d.pega = Math.max(0.2, d.pega - dt * 0.03); }
       d.vida -= dt * (lluvia > 0.05 ? 0.4 : 1);
       // en el "techo" se descuelgan; bajo el agua se funden con ella; fuera del cuerpo, se van
-      const cae = gDentro < -0.55 && d.r > 0.11 && Math.random() < dt * 0.8;
+      const cae = gDentro < -0.55 && d.r > 0.09 && Math.random() < dt * 0.8;
       if (cae || d.vida <= 0 || bajoAgua(d) || d.x < BASE_INT_X + 0.3 || d.x > CORCHO_INT_X - 0.5) gotas.splice(i, 1);
     }
   }

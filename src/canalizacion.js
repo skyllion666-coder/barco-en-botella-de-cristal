@@ -109,9 +109,10 @@ export class Canalizacion {
     const w = Math.round(ancho * dpr), h = Math.round(alto * dpr);
     if (w === this.ancho && h === this.alto) return;
     this.ancho = w; this.alto = h;
-    for (const k of ['rtEscena', 'rtComp', 'rtAtras', 'rtHDR', 'rtB1a', 'rtB1b', 'rtB2a', 'rtB2b', 'rtRefl']) this[k]?.dispose();
+    for (const k of ['rtEscena', 'rtComp', 'rtCopia', 'rtAtras', 'rtHDR', 'rtB1a', 'rtB1b', 'rtB2a', 'rtB2b', 'rtRefl']) this[k]?.dispose();
     this.rtEscena = this._rt(w, h, { msaa: true, profundidad: true, textura: true });
     this.rtComp = this._rt(w, h);
+    this.rtCopia = this._rt(w, h);
     this.rtAtras = this._rt(w, h, { profundidad: true });
     this.rtHDR = this._rt(w, h, { msaa: true });
     this.rtRefl = this._rt(Math.max(2, w >> 1), Math.max(2, h >> 1), { msaa: true, profundidad: true });
@@ -150,7 +151,8 @@ export class Canalizacion {
 
   // etapas: { mundo, interior?, camara, vidrio, aguaPasada? }. El interior (barco, lluvia, rayos) se dibuja
   // encima de la habitación en el mismo destino, compartiendo profundidad, pero con sus propias luces.
-  dibujar({ mundo, interior, camara, vidrio, aguaPasada, reflejoPasada, tiempo }) {
+  // encimaAgua { hay(), dibujar(tColor, tProf) }: lo que va dentro de la botella encima del agua ya compuesta (salpicaduras)
+  dibujar({ mundo, interior, camara, vidrio, aguaPasada, reflejoPasada, encimaAgua, tiempo }) {
     const r = this.renderer;
     r.setRenderTarget(this.rtEscena);
     r.clear();
@@ -160,6 +162,16 @@ export class Canalizacion {
     let origen = this.rtEscena;
     if (reflejoPasada) reflejoPasada(this.rtRefl);
     if (aguaPasada) { aguaPasada(this.rtEscena, this.rtComp); origen = this.rtComp; }
+    // salpicaduras encima del agua compuesta: refractan una copia de esa imagen y se dibujan en ella, antes del
+    // vidrio (que la usa para refractar): así quedan dentro de la botella
+    if (encimaAgua && encimaAgua.hay()) {
+      this.matCopia.uniforms.tColor.value = origen.texture;
+      this.pasada(this.matCopia, this.rtCopia);
+      r.setRenderTarget(origen);
+      r.autoClear = false;
+      encimaAgua.dibujar(this.rtCopia.texture, this.rtEscena.depthTexture);
+      r.autoClear = true;
+    }
 
     // pared trasera del vidrio
     r.setRenderTarget(this.rtAtras);

@@ -72,9 +72,9 @@ const FRAG_FRENTE = /* glsl */`
       float sx = (texture2D(tGotas, uvG + dU).r - texture2D(tGotas, uvG - dU).r) / (2.0 * (GX1 - GX0) / 1024.0);
       float sa = (texture2D(tGotas, uvG + dV).r - texture2D(tGotas, uvG - dV).r) / (2.0 * R * 6.2831853 / 512.0);
       vec3 pend = normalize(vEje) * sx + normalize(vTan + vec3(1e-5)) * sa;
-      N = normalize(N + pend * 0.9);
+      N = normalize(N + pend * 0.6);
       gota = smoothstep(0.004, 0.03, texture2D(tGotas, uvG).r);
-      borde = gota * smoothstep(0.6, 2.0, length(pend));
+      borde = gota * smoothstep(1.0, 2.6, length(pend));
       nucleo = gota * (1.0 - smoothstep(0.3, 1.0, length(pend)));
     }
 
@@ -113,13 +113,13 @@ const FRAG_FRENTE = /* glsl */`
     float camino = wF / cosF + wB / cosB;
     vec3 absorcion = exp(-vec3(0.55, 0.16, 0.24) * camino * 0.16);
     col *= absorcion;
-    // lente diminuta: borde oscuro (refleja hacia dentro) y centro que concentra la luz
-    col *= 1.0 - 0.45 * borde;
-    col += vec3(0.05, 0.055, 0.06) * nucleo * uLuzExt;
+    // lente diminuta y plana: filo algo oscuro (refleja hacia dentro) y centro que concentra un poco la luz
+    col *= 1.0 - 0.28 * borde;
+    col += vec3(0.025, 0.028, 0.03) * nucleo * uLuzExt;
 
     // Reflejos
     float Ff = schlick(0.045, cosF);
-    Ff = min(1.0, Ff + 0.10 * gota); // la superficie curva de la gota refleja más (destellos)
+    Ff = min(1.0, Ff + 0.05 * gota); // la superficie curva de la gota refleja más (destellos)
     float Fb = schlick(0.045, cosB);
     vec3 Rf = reflect(I, N);
     vec3 Rb = reflect(I, Nb);

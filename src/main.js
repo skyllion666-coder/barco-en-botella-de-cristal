@@ -88,7 +88,7 @@ const agua = crearAgua({ renderer: canal.renderer, botella, texRuido: ruido, cub
 const flotacion = crearFlotacion({ barco, agua, botella });
 const gotas = crearGotas({ renderer: canal.renderer, agua, botella });
 const viento = crearViento();
-const salpicaduras = crearSalpicaduras({ escena: mundo.interior.escena, agua, botella });
+const salpicaduras = crearSalpicaduras({ agua, botella, cubo });
 const proaBarco = new THREE.Vector3();
 const botellita = crearBotellita({ escena: mundo.interior.escena, agua, botella });
 const gaviotas = crearGaviotas({ escena: mundo.interior.escena, agua, botella });
@@ -236,6 +236,8 @@ function avanzar(dt, t) {
   proaBarco.set((barco.info?.eslora ?? 8.4) * 0.5, 0.25, 0).applyMatrix4(barco.grupo.matrix);
   salpicaduras.actualizar(dt, t, { viento: viento.total, barco: { vcab: flotacion.estado.vcab, proa: proaBarco, golpe: flotacion.estado.golpe, puntoBorda } });
   salpicaduras.color(clima.luzFinal, clima.bioluminiscencia);
+  // las gotas grandes que caen al agua dejan una onda pequeña
+  while (salpicaduras.ondas.length) { const o = salpicaduras.ondas.pop(); if (impulsos.length < 8) impulsos.push(o); }
   botellita.actualizar(dt, t, { viento: viento.total, barcoU: flotacion.estado.u, barcoV: flotacion.estado.v, radioBarco: 0.8 * 0.55 * (barco.info?.eslora ?? 8.4) + 1.2 });
   gaviotas.actualizar(dt, t, {
     clima: clima.p, barco, centroU: flotacion.estado.u, centroV: flotacion.estado.v, viento: viento.total, dirViento: viento.estado.dir,
@@ -262,6 +264,10 @@ function dibujar(t, dt = 1 / 60) {
       entornoRot, luz: clima.luzFinal, sol, niebla: clima.p.niebla, colNiebla: clima.p.colNiebla, refl: canal.rtRefl.texture,
       aire: clima.p.aire, colAire: clima.colAire, nubes: clima.nubes,
     }),
+    encimaAgua: {
+      hay: () => salpicaduras.cantidad > 0,
+      dibujar: (tColor, tProf) => salpicaduras.dibujar(canal.renderer, camara, tColor, tProf, { entornoRot, sol, ancho: canal.ancho, alto: canal.alto }),
+    },
   });
   window.__cuadros = (window.__cuadros || 0) + 1;
 }

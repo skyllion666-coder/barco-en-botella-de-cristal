@@ -148,6 +148,18 @@ Probado en móvil real (GitHub Pages): al pasar de horizontal a vertical el barc
 - Salía al pasar de lluvia a nieve o a niebla. Ahora solo aparece si escampa a cielo claro (nieve < 0,05 y niebla < 0,008) y se apaga si
   llegan nieve o niebla. Prueba: de lluvia a nieve 0, a niebla 0, a noche 0, a despejado 1, a atardecer 0,76.
 
+### Gotas, salpicaduras y espuma realistas (versión 16)
+- Petición del usuario: solo gotas, salpicaduras y crestas, sin tocar botella, barco, cámara ni luz general.
+- `salpicaduras.js` rehecho: cada gota es una lente de agua (refracta invertido lo que hay detrás, Fresnel con el entorno, brillo del
+  sol y de la luz de arriba, foco de luz abajo, filo fino oscuro), con forma de lágrima y alargada según su velocidad. Tamaños: pocas
+  grandes (3 %), medianas (17 %) y pulverización fina (80 %, velo claro que se evapora). Nacen en ráfagas en la cresta más alta y
+  empinada del momento (unas veces por segundo, más con más mar): una lámina corta que sale hacia delante y arriba con la ola y la
+  sigue unas décimas de segundo (filamentos). Caen balísticamente, con rozamiento y viento; al caer al agua, las grandes dejan una onda.
+- Se dibujan sobre el agua ya compuesta y antes del vidrio (`canalizacion.js`, `encimaAgua`, con una copia `rtCopia` para refractar);
+  el barco las tapa por la profundidad de la escena. `salpicaduras.romper(u, v)` provoca una ráfaga (pruebas).
+- Espuma de las crestas (`agua.js`): encaje de filamentos y huecos, semitransparente, islas solo en la espuma recién hecha, con brillos.
+- Gotas de lluvia en el cristal (`gotas.js`, `vidrio.js`): más planas y pequeñas, filo más fino; antes parecían perlas.
+
 ### Sorpresas (no contárselas al usuario hasta que las vea)
 - Bioluminiscencia: de noche el agua agitada, la estela, las burbujas y las salpicaduras brillan en azul verdoso.
 - Estrellas fugaces de noche, cada 6-16 s, dentro de la botella.
