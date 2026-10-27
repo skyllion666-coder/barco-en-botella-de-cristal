@@ -180,6 +180,23 @@ Probado en móvil real (GitHub Pages): al pasar de horizontal a vertical el barc
 - Pesca: cada 20-45 s una gaviota se tira en picado al agua, salpica y deja ondas, y sube con un pececillo plateado en el pico que
   coletea hasta que se lo traga.
 
+### Batalla: cañones contra el cristal (versión 18, 27-10-2026)
+- Petición del usuario: que los cañones disparen, rompan la botella y salga el agua, «todo real». Botón «Fuego» (💥) en el dock o tecla F.
+- `batalla.js`: andanada de 3 cañones (fogonazo con luz, humo que se expande y sube, retroceso que hace escorar el galeón, estampido y
+  vibración). La bala va «a la lumbre del agua»: entra en el agua (salpica, frena) y golpea el cristal por debajo de la línea de flotación.
+- Vidrio (`vidrio.js`, `uGrietas[4]`, `uAgujero`): grietas en estrella (13 rayos, anillos de tela de araña, centro machacado) que se
+  propagan en décimas de segundo y brillan como espejitos; al tercer impacto se abre un agujero de borde quebrado con canto verdoso.
+- Rotura: cámara lenta (0,18×) y la vista se acerca al agujero; 26 trozos de vidrio salen despedidos, rebotan en la mesa y se quedan planos.
+- Fuga con física real a escala (1 u = 1 cm, g = 981 cm/s²): Torricelli v = √(2gh), caudal Cd·A·v (Cd = 0,61), solo por la parte del
+  agujero que queda bajo el agua; el nivel baja hasta el borde del agujero. Vena de agua (tubo que adelgaza al caer por continuidad,
+  vena contracta 0,78) que se rompe en gotas (Plateau-Rayleigh), corona de salpicaduras en la mesa y charco (área = volumen / 0,3 cm).
+- El chorro y los trozos se dibujan después del vidrio (`encimaVidrio` en `canalizacion.js`) para no quedar refractados por él.
+- Sonido: cañonazo, chasquido del cristal, rotura con tintineos, chapuzón de la bala, chorro continuo según el caudal.
+- Prueba en captura: `?t=12&ui=0&fuego=8` (andanada 8 s antes del final). `window.__api.batalla`.
+- **Sorpresa (no contársela al usuario hasta que la vea):** cuando deja de salir agua, el tiempo va hacia atrás: el agua del charco
+  vuelve por el aire al agujero (la misma parábola al revés), los cristales suben de la mesa a su sitio, las grietas se cierran y el
+  nivel vuelve a subir, con un barrido sonoro y tintineos. La botella queda como nueva y se puede volver a disparar.
+
 ## Decisiones tomadas
 - Estilo: lo más realista posible (superar la foto de referencia).
 - El barco es procedural porque el entorno de desarrollo no puede descargar de Poly Pizza, Sketchfab ni Poly Haven (red restringida).

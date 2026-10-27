@@ -152,7 +152,7 @@ export class Canalizacion {
   // etapas: { mundo, interior?, camara, vidrio, aguaPasada? }. El interior (barco, lluvia, rayos) se dibuja
   // encima de la habitación en el mismo destino, compartiendo profundidad, pero con sus propias luces.
   // encimaAgua { hay(), dibujar(tColor, tProf) }: lo que va dentro de la botella encima del agua ya compuesta (salpicaduras)
-  dibujar({ mundo, interior, camara, vidrio, aguaPasada, reflejoPasada, encimaAgua, tiempo }) {
+  dibujar({ mundo, interior, camara, vidrio, aguaPasada, reflejoPasada, encimaAgua, encimaVidrio, tiempo }) {
     const r = this.renderer;
     r.setRenderTarget(this.rtEscena);
     r.clear();
@@ -186,6 +186,8 @@ export class Canalizacion {
     r.autoClear = false;
     r.clearDepth();
     r.render(vidrio.escenaFrente, camara);
+    // lo que está fuera y delante del cristal (chorro de agua, trozos de vidrio): sin refracción, tapado solo por el vidrio de delante
+    if (encimaVidrio) r.render(encimaVidrio, camara);
     r.autoClear = true;
 
     this.bloom();

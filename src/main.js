@@ -18,6 +18,7 @@ import { crearViento } from './viento.js';
 import { crearSalpicaduras } from './salpicaduras.js';
 import { crearBotellita } from './botellita.js';
 import { crearGaviotas } from './gaviotas.js';
+import { crearBatalla } from './batalla.js';
 
 const params = new URLSearchParams(location.search);
 const num = (k, d) => (params.has(k) ? parseFloat(params.get(k)) : d);
@@ -82,6 +83,7 @@ const U = {
   uRes: { value: new THREE.Vector2(1, 1) }, uEntornoRot: { value: new THREE.Matrix3() },
   uProy: { value: new THREE.Vector2(1, 1) }, uTiempo: { value: 0 }, uLuzExt: { value: new THREE.Color(1, 1, 1) }, uDbg: { value: num('dbg', 0) },
   tGotas: { value: null }, uHayGotas: { value: 0 },
+  uGrietas: { value: [0, 1, 2, 3].map(() => new THREE.Vector4(0, 0, 0, 0)) }, uAgujero: { value: new THREE.Vector4(0, 0, 0, 0) },
 };
 const vidrio = crearVidrio(U, botella.exterior);
 const agua = crearAgua({ renderer: canal.renderer, botella, texRuido: ruido, cubo, relleno: num('relleno', 0.30) });
@@ -153,6 +155,16 @@ const sensores = crearSensores(lienzo);
 if (params.has('roll') || params.has('pitch')) sensores.inclinar(num('roll', 0), num('pitch', 0));
 
 let audio = crearAudio();
+// Batalla: el galeón dispara al cristal (botón «Fuego» o tecla F). Al romperse, cámara lenta y la vista se acerca.
+const batalla = crearBatalla({ interior: mundo.interior.escena, exterior: mundo.escena, mundoEscena: mundo.escena, cubo, barco, agua, botella, salpicaduras, flotacion, audio, U });
+const aPantalla = new THREE.Vector3();
+batalla.alRomper = (T) => {
+  if (modoCaptura) return;
+  aPantalla.copy(T).project(camara);
+  zoom.objetivo = { z: 1.6, x: (aPantalla.x + 1) / 2 * innerWidth, y: (1 - aPantalla.y) / 2 * innerHeight };
+};
+batalla.alRebobinar = () => { if (zoom.z > 1) zoom.objetivo = { z: 1, x: innerWidth / 2, y: innerHeight / 2 }; };
+addEventListener('keydown', (e) => { if (e.key === 'f' || e.key === 'F') batalla.andanada(); });
 // Vibración con los truenos cercanos (Android; iPhone no la permite desde la web). Llega a la vez que el trueno.
 const opciones = { vibrar: true };
 function vibrarTrueno(retraso) {
@@ -282,7 +294,7 @@ setInterval(revisarCampanas, 5000);
 const rend = { fps: 0, cuadros: 0, desde: 0 }; // fotogramas por segundo medidos (se muestran en Ajustes)
 if (params.get('ui') !== '0') {
   ui = crearUI({
-    clima, sensores, audio,
+    clima, sensores, audio, alDisparar: () => batalla.andanada(),
     alAjustarCalidad: () => { calidad.modo = MODOS[(MODOS.indexOf(calidad.modo) + 1) % MODOS.length]; redimensionar(); },
     estadoCalidad: () => calidad.modo,
     opciones, version: VERSION, creditoBarco: barco.credito, rendimiento: () => ({ fps: rend.fps, resolucion: Math.round(dprActual() / dprDisp * 100) }),
@@ -296,8 +308,8 @@ const solMundo = new THREE.Vector3(-0.62, 0.5, 0.6).normalize(), sol = new THREE
 const entornoRot = new THREE.Matrix3();
 let ultimo = null, tTotal = 0;
 
-function avanzar(dt, t) {
-  sensores.actualizar(dt);
+function avanzar(dt, t, dtReal = dt) {
+  sensores.actualizar(dtReal);
   // gravedad aparente = gravedad real - aceleración del dispositivo (fuerza de inercia sobre el agua)
   gEf.copy(sensores.g).multiplyScalar(9.81).addScaledVector(sensores.acel, -0.9);
   if (gEf.lengthSq() < 1) gEf.copy(sensores.g);
@@ -310,6 +322,7 @@ function avanzar(dt, t) {
   const nGotas = clima.p.lluvia * 38 * dt;
   const acum = nGotas + (Math.random() < nGotas % 1 ? 1 : 0);
   for (let i = 0; i < Math.floor(acum) && impulsos.length < 8; i++) impulsos.push([(Math.random() * 20 - 12), (Math.random() * 2 - 1) * 5, 0.05 + Math.random() * 0.06, 0.15]);
+  batalla.actualizar(dtReal, { gEf, impulsos, alto: canal.alto });
   if (sensores.sacudida > 0.2 && impulsos.length < 7) impulsos.push([(Math.random() * 2 - 1) * 12, (Math.random() * 2 - 1) * 4, (Math.random() - 0.5) * 0.35 * sensores.sacudida, 0.5]);
   agua.simular(dt, t, impulsos);
 
@@ -352,6 +365,7 @@ function dibujar(t, dt = 1 / 60) {
       entornoRot, luz: clima.luzFinal, sol, niebla: clima.p.niebla, colNiebla: clima.p.colNiebla, refl: canal.rtRefl.texture,
       aire: clima.p.aire, colAire: clima.colAire, nubes: clima.nubes,
     }),
+    encimaVidrio: batalla.hayEncima ? batalla.encima : null,
     encimaAgua: {
       hay: () => salpicaduras.cantidad > 0,
       dibujar: (tColor, tProf) => salpicaduras.dibujar(canal.renderer, camara, tColor, tProf, { entornoRot, sol, ancho: canal.ancho, alto: canal.alto }),
@@ -370,13 +384,14 @@ function adaptarCalidad(dtMs) {
 
 function cuadro(ahora) {
   const dtMs = ultimo === null ? 16.7 : ahora - ultimo;
-  const dt = Math.min(0.05, dtMs / 1000);
+  const dtR = Math.min(0.05, dtMs / 1000);
+  const dt = dtR * batalla.estado.lenta; // cámara lenta al romperse la botella
   ultimo = ahora; tTotal += dt;
   rend.cuadros++;
   if (ahora - rend.desde >= 1000) { rend.fps = Math.round(rend.cuadros * 1000 / (ahora - rend.desde)); rend.cuadros = 0; rend.desde = ahora; }
   adaptarCalidad(Math.min(dtMs, 100));
   animarZoom(dt);
-  avanzar(dt, tTotal);
+  avanzar(dt, tTotal, dtR);
   dibujar(tTotal, dt);
 }
 
@@ -388,6 +403,7 @@ if (modoCaptura) {
     if (params.has('arcoiris') && i === Math.max(0, pasos - 300)) clima.forzarArcoiris(i / 30);
     if (params.has('fugaz') && i === pasos - 10) clima.cielo.lanzarFugaz();
     if (params.has('ola') && i === Math.max(0, pasos - 255)) agua.lanzarOlaGrande(i / 30); // llega al centro al final
+    if (params.has('fuego') && i === Math.max(0, pasos - Math.round(num('fuego', 2) * 30))) batalla.andanada(); // ?fuego=s: andanada s segundos antes
     avanzar(1 / 30, i / 30);
   }
   dibujar(T);
@@ -399,5 +415,5 @@ if (modoCaptura) {
 }
 window.__api = {
   clima, sensores, agua, calidad, redibujar: (dt) => dibujar(tTotal, dt), camara, canal, avanzar, botella, audio, gotas, viento, salpicaduras, botellita, gaviotas,
-  flotacion, barco,
+  flotacion, barco, batalla,
 };

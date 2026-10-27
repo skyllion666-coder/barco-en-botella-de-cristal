@@ -280,5 +280,93 @@ export function crearAudio() {
     sonarGaviota(ctx, maestro, ctx.currentTime + 0.05, 0.7 + Math.random() * 0.5);
   }
 
-  return { get activo() { return est.activo; }, alternar, actualizar, trueno, sintetizarTrueno, campanas, sonarCampana, gaviota };
+
+  // ---- batalla: cañonazo, cristal que raja, rotura, tintineo de trozos, chorro y rebobinado
+  function ruidoCorto(seg) {
+    est.buffers = est.buffers || {};
+    const k = 'r' + seg;
+    if (!est.buffers[k]) est.buffers[k] = bufferRuido(ctx, seg, 'blanco');
+    return est.buffers[k];
+  }
+  function canonazo(retraso = 0) {
+    if (!ctx || !est.activo) return;
+    const t0 = ctx.currentTime + retraso;
+    // estampido: golpe de ruido muy corto + cuerpo grave que cae de tono + cola que retumba (dentro del cristal)
+    const n = ctx.createBufferSource(); n.buffer = ruidoCorto(1.6);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(5200, t0); lp.frequency.exponentialRampToValueAtTime(260, t0 + 0.35);
+    const sat = ctx.createWaveShaper(); sat.curve = curvaSaturacion(3);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(1.1, t0 + 0.004); g.gain.exponentialRampToValueAtTime(0.18, t0 + 0.12); g.gain.exponentialRampToValueAtTime(0.0008, t0 + 1.5);
+    n.connect(lp); lp.connect(sat); sat.connect(g); g.connect(maestro); n.start(t0); n.stop(t0 + 1.6);
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(150, t0); o.frequency.exponentialRampToValueAtTime(42, t0 + 0.4);
+    const go = ctx.createGain(); go.gain.setValueAtTime(0.0001, t0); go.gain.exponentialRampToValueAtTime(0.9, t0 + 0.01); go.gain.exponentialRampToValueAtTime(0.001, t0 + 0.6);
+    o.connect(go); go.connect(maestro); o.start(t0); o.stop(t0 + 0.65);
+    // eco metálico de la botella (resonancia del vidrio con el golpe)
+    for (const fr of [1230, 1870, 2650]) {
+      const r = ctx.createOscillator(); r.frequency.value = fr * (0.97 + Math.random() * 0.06);
+      const gr = ctx.createGain(); gr.gain.setValueAtTime(0.0001, t0); gr.gain.exponentialRampToValueAtTime(0.012, t0 + 0.02); gr.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.9);
+      r.connect(gr); gr.connect(maestro); r.start(t0); r.stop(t0 + 0.95);
+    }
+  }
+  function tintineo(fuerza = 0.5, retraso = 0) {
+    if (!ctx || !est.activo) return;
+    const t0 = ctx.currentTime + retraso;
+    const base = 2600 + Math.random() * 3800;
+    for (const m of [1, 2.32, 4.25]) {
+      const o = ctx.createOscillator(); o.frequency.value = base * m;
+      const g = ctx.createGain(); const d = 0.08 + Math.random() * 0.25;
+      g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.05 * fuerza / m, t0 + 0.002); g.gain.exponentialRampToValueAtTime(0.0001, t0 + d);
+      o.connect(g); g.connect(maestro); o.start(t0); o.stop(t0 + d + 0.02);
+    }
+  }
+  function cristal(fuerza = 1) {
+    if (!ctx || !est.activo) return;
+    const t0 = ctx.currentTime;
+    // chasquido seco (la raja corre por el vidrio) y crujidos pequeños detrás
+    const n = ctx.createBufferSource(); n.buffer = ruidoCorto(0.3);
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1800;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.7 * fuerza, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.09);
+    n.connect(hp); hp.connect(g); g.connect(maestro); n.start(t0); n.stop(t0 + 0.3);
+    for (let i = 0; i < 6 * fuerza; i++) tintineo(0.25 * fuerza, 0.02 + Math.random() * 0.25);
+  }
+  function rotura() {
+    if (!ctx || !est.activo) return;
+    cristal(1.6);
+    for (let i = 0; i < 40; i++) tintineo(0.25 + Math.random() * 0.6, Math.random() * 1.2 * Math.random());
+  }
+  function chapuzon() {
+    if (!ctx || !est.activo) return;
+    const t0 = ctx.currentTime;
+    const n = ctx.createBufferSource(); n.buffer = ruidoCorto(0.5);
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.setValueAtTime(900, t0); bp.frequency.exponentialRampToValueAtTime(300, t0 + 0.3); bp.Q.value = 1.2;
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.35, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.4);
+    n.connect(bp); bp.connect(g); g.connect(maestro); n.start(t0); n.stop(t0 + 0.5);
+  }
+  // chorro continuo: ruido filtrado cuyo volumen sigue al caudal
+  function chorro(nivel) {
+    if (!ctx || !est.activo) return;
+    if (!est.chorro) {
+      const n = ctx.createBufferSource(); n.buffer = ruidoCorto(2.0); n.loop = true;
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1400; bp.Q.value = 0.5;
+      const g = ctx.createGain(); g.gain.value = 0;
+      n.connect(bp); bp.connect(g); g.connect(maestro); n.start();
+      est.chorro = { g, bp };
+    }
+    const t = ctx.currentTime;
+    est.chorro.g.gain.setTargetAtTime(0.28 * nivel, t, 0.1);
+    est.chorro.bp.frequency.setTargetAtTime(700 + 1500 * nivel + 200 * Math.sin(t * 9), t, 0.05);
+  }
+  // rebobinado: un barrido que sube y destellos de cristal al revés
+  function magia(dur = 4) {
+    if (!ctx || !est.activo) return;
+    const t0 = ctx.currentTime;
+    const n = ctx.createBufferSource(); n.buffer = ruidoCorto(2.0); n.loop = true;
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 4;
+    bp.frequency.setValueAtTime(300, t0); bp.frequency.exponentialRampToValueAtTime(5000, t0 + dur);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.25, t0 + dur * 0.9); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur + 0.15);
+    n.connect(bp); bp.connect(g); g.connect(maestro); n.start(t0); n.stop(t0 + dur + 0.2);
+    for (let i = 0; i < 30; i++) tintineo(0.2 + 0.5 * (i / 30), dur * Math.sqrt(i / 30));
+  }
+
+  return { get activo() { return est.activo; }, alternar, actualizar, trueno, sintetizarTrueno, campanas, sonarCampana, gaviota, canonazo, cristal, rotura, tintineo, chapuzon, chorro, magia };
 }

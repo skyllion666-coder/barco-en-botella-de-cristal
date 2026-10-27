@@ -49,7 +49,7 @@ function el(tag, attrs = {}, hijos = []) {
   return e;
 }
 
-export function crearUI({ clima, sensores, audio, alAjustarCalidad, estadoCalidad, opciones = {}, rendimiento, version, creditoBarco = '' }) {
+export function crearUI({ clima, sensores, audio, alDisparar, alAjustarCalidad, estadoCalidad, opciones = {}, rendimiento, version, creditoBarco = '' }) {
   const estilo = el('style'); estilo.textContent = CSS; document.head.append(estilo);
   const raiz = el('div', { id: 'ui' });
   document.body.append(raiz);
@@ -64,6 +64,10 @@ export function crearUI({ clima, sensores, audio, alAjustarCalidad, estadoCalida
     ]);
     botones[id] = b; dock.append(b);
   }
+  // ¡Fuego!: andanada de tres cañones contra el cristal
+  dock.append(el('button', { type: 'button', class: 'fuego', 'aria-label': 'Fuego', onclick: () => { alDisparar?.(); } }, [
+    el('span', { class: 'ic', texto: '💥' }), el('span', { class: 'tx', texto: 'Fuego' }),
+  ]));
 
   // --- panel de ajustes
   const sMar = el('input', { type: 'range', min: 0, max: 1, step: 0.01, value: 0.5 });

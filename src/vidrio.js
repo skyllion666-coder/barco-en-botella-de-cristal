@@ -36,6 +36,38 @@ const GLSL_SOPLADO = /* glsl */`
     return normalize(N + normalize(eje) * anillos * k + t * vetas * k * 0.7);
   }`;
 
+// Grietas en estrella (rayos que salen del impacto, anillos de tela de araña entre ellos y centro machacado)
+// y agujero de borde quebrado. Coordenadas sobre la pared: (x, arco) respecto al punto de impacto.
+const GLSL_GRIETAS = /* glsl */`
+  float hashG(float n){ return fract(sin(n * 127.1 + 3.7) * 43758.5453); }
+  vec2 coordPared(vec3 L, vec3 P){
+    float da = atan(L.z, L.y) - atan(P.z, P.y);
+    da = mod(da + 3.14159265, 6.2831853) - 3.14159265;
+    return vec2(L.x - P.x, da * 5.0);
+  }
+  float grieta(vec2 q, float k, float sem){
+    float r = length(q);
+    if (k <= 0.001 || r > 3.6 * k) return 0.0;
+    float a = atan(q.y, q.x);
+    const float NR = 13.0;
+    float s = (a / 6.2831853 + 0.5) * NR;
+    float c = floor(s);
+    float desv = (hashG(c + sem) - 0.5) * 0.45;
+    float onda = 0.10 * sin(r * 5.0 + hashG(c * 3.1 + sem) * 6.28) + 0.05 * sin(r * 13.0 + c * 1.7);
+    float fr = fract(s) - 0.5 - desv - onda;
+    float dLin = abs(fr) * 6.2831853 * r / NR;
+    float largo = k * (1.0 + 2.4 * hashG(c * 7.7 + sem));
+    float ancho = 0.008 + 0.012 * (1.0 - smoothstep(0.0, largo, r));
+    float m = (1.0 - smoothstep(ancho * 0.4, ancho, dLin)) * (1.0 - smoothstep(largo * 0.75, largo, r));
+    for (int i = 0; i < 3; i++){
+      float rk = k * (0.3 + 0.42 * float(i)) * (1.0 + 0.3 * (hashG(c * 1.3 + float(i) + sem) - 0.5));
+      float hay = step(0.4, hashG(c * 5.1 + float(i) * 2.3 + sem)) * step(rk, largo);
+      m = max(m, hay * (1.0 - smoothstep(0.004, 0.012, abs(r - rk * (1.0 + 0.08 * sin(a * 9.0 + sem))))));
+    }
+    m = max(m, (1.0 - smoothstep(0.06 * k, 0.2 * k, r)) * (0.55 + 0.45 * hashG(floor(a * 9.0) + floor(r * 40.0))));
+    return m;
+  }`;
+
 const FRAG_ATRAS = /* glsl */`
   varying vec3 vN; varying vec3 vP; varying vec3 vL; varying float vPared; varying vec3 vEje; varying vec3 vTan;
   ${GLSL_SOPLADO}
@@ -49,8 +81,10 @@ const FRAG_FRENTE = /* glsl */`
   uniform vec2 uRes; uniform mat3 uEntornoRot; uniform vec2 uProy;
   uniform float uTiempo; uniform vec3 uLuzExt; uniform float uDbg;
   uniform sampler2D tGotas; uniform float uHayGotas;
+  uniform vec4 uGrietas[4]; uniform vec4 uAgujero;
   varying vec3 vN; varying vec3 vP; varying vec3 vL; varying float vPared; varying vec3 vRad; varying vec3 vEje; varying vec3 vTan;
   ${GLSL_SOPLADO}
+  ${GLSL_GRIETAS}
 
   vec3 envMuestra(vec3 dView, float lod){
     vec3 dw = transpose(mat3(viewMatrix)) * dView;
@@ -127,6 +161,35 @@ const FRAG_FRENTE = /* glsl */`
     vec3 refB = envMuestra(Rb, 1.2) * uLuzExt;
     col = col * (1.0 - Ff) * (1.0 - Fb * 0.6) + refF * Ff + refB * Fb * (1.0 - Ff) * absorcion * absorcion * 0.9;
 
+    // grietas: cada raja refleja la luz como un espejo diminuto (brillo plateado) y desvía lo de detrás
+    float gr = 0.0;
+    for (int i = 0; i < 4; i++){
+      vec4 G = uGrietas[i];
+      if (G.w > 0.0) gr = max(gr, grieta(coordPared(vL, G.xyz), G.w, float(i) * 17.0 + 1.0));
+    }
+    if (uAgujero.w > 0.0) {
+      vec2 q = coordPared(vL, uAgujero.xyz);
+      float a = atan(q.y, q.x);
+      // borde quebrado: radio aleatorio por sectores, unidos en línea recta (aristas de cristal)
+      float sct = (a / 6.2831853 + 0.5) * 11.0, c0 = floor(sct), fs = fract(sct);
+      float rA = uAgujero.w * (0.7 + 0.6 * hashG(c0 + 40.0)), rB = uAgujero.w * (0.7 + 0.6 * hashG(mod(c0 + 1.0, 11.0) + 40.0));
+      float rb = mix(rA, rB, fs);
+      float r = length(q);
+      if (r < rb) {
+        col = texture2D(tEscena, suv).rgb; // por el agujero se ve el interior sin vidrio delante
+        gr = 0.0;
+      } else if (r < rb + 0.07) {
+        // canto del cristal roto: grueso, verdoso y brillante
+        float e = 1.0 - (r - rb) / 0.07;
+        col = mix(col, vec3(0.30, 0.48, 0.40) * uLuzExt + envMuestra(reflect(I, N), 0.0) * 0.6 * uLuzExt, 0.85 * e);
+      }
+    }
+    if (gr > 0.0) {
+      vec3 Ng = normalize(N + vec3(sin(vL.x * 41.0), cos(vL.y * 37.0), sin(vL.z * 29.0)) * 0.6);
+      vec3 brilloG = envMuestra(reflect(I, Ng), 0.0) * uLuzExt;
+      col = col * (1.0 - 0.45 * gr) + (brilloG * 1.4 + vec3(0.12, 0.14, 0.14) * uLuzExt) * gr;
+    }
+
     if (uDbg > 0.5) {
       vec3 d = vec3(0.0);
       if (uDbg < 1.5) d = texture2D(tEscena, suv).rgb;
@@ -151,6 +214,7 @@ export function crearVidrio(U, geometria) {
       tEscena: U.tEscena, tAtras: U.tAtras, tEntorno: U.tEntorno, uRes: U.uRes,
       uEntornoRot: U.uEntornoRot, uProy: U.uProy, uTiempo: U.uTiempo, uLuzExt: U.uLuzExt, uDbg: U.uDbg,
       tGotas: U.tGotas, uHayGotas: U.uHayGotas,
+      uGrietas: U.uGrietas || { value: [0, 1, 2, 3].map(() => new THREE.Vector4()) }, uAgujero: U.uAgujero || { value: new THREE.Vector4() },
     },
   });
   const atras = new THREE.Mesh(geometria, matAtras);
